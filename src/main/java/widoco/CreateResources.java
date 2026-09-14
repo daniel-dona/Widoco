@@ -307,7 +307,8 @@ public class CreateResources {
             if ((c.getDescriptionPath(c.getCurrentLanguage()) != null) && (!"".equals(c.getDescriptionPath(c.getCurrentLanguage())))) {
                 textToWrite = WidocoUtils.readExternalResource(c.getDescriptionPath(c.getCurrentLanguage()));
             } else {
-                textToWrite = Constants.getDescriptionSectionTitleAndPlaceHolder(c, lang, c.getDescription(c.getCurrentLanguage()));
+                textToWrite = Constants.getDescriptionSectionTitleAndPlaceHolder(c, lang,
+                        c.getDescription(c.getCurrentLanguage()), c.hasPerLanguageDescription(c.getCurrentLanguage()));
                 if(!c.isIncludeAllSectionsInOneDocument()){
                     saveDocument(path + File.separator + "description-" + c.getCurrentLanguage() + ".html",
                                     textToWrite, c);
@@ -460,6 +461,25 @@ public class CreateResources {
 			// do all provenance related stuff here
 		}
 		resources.mkdir();
+		// EDINT extension: copy extra resources into the output resources folder
+		for (String er : c.getExtraResources()) {
+			File src = new File(er);
+			if (src.exists()) {
+				File dst = new File(resources.getAbsolutePath() + File.separator + src.getName());
+				if (src.isDirectory()) {
+					try {
+						org.apache.commons.io.FileUtils.copyDirectory(src, dst);
+					} catch (IOException e) {
+						logger.error("Error while copying extra resource directory " + er + ": " + e.getMessage());
+					}
+				} else {
+					java.nio.file.Files.copy(src.toPath(), dst.toPath(),
+							java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+				}
+			} else {
+				logger.warn("Extra resource not found (skipping): " + er);
+			}
+		}
 		// copy jquery
 		WidocoUtils.copyLocalResource("/lode/jquery.js",
 				new File(resources.getAbsolutePath() + File.separator + "jquery.js"));

@@ -286,6 +286,7 @@ public class Constants {
 	// EDINT extension
 	public static final String PF_EXTRA_CSS = "extraCSS";
 	public static final String PF_EXTRA_JS = "extraJS";
+	public static final String PF_EXTRA_RESOURCES = "extraResources";
 	public static final String PF_OMIT_README = "omitReadme";
 	public static final String PF_REFERENCES_CODE_REPO = "codeRepository";
 
@@ -483,12 +484,19 @@ public class Constants {
 	}
 
 	public static String getReferencesSection(String referencesContent, Configuration c, Properties lang) {
+		// EDINT extension: optional references content, per language. The content is
+		// written verbatim after the title line (it carries its own markup).
+		if (referencesContent != null && !referencesContent.isEmpty()) {
+			String fullPlaceholder = lang.getProperty(LANG_REFERENCES_PLACEHOLDER, "References");
+			String titleLine = fullPlaceholder;
+			int closeIdx = fullPlaceholder.indexOf("</h2>");
+			if (closeIdx >= 0) {
+				titleLine = fullPlaceholder.substring(0, closeIdx + "</h2>".length());
+			}
+			return "<h2 id=\"ref\" class=\"list\">" + titleLine + "\n" + referencesContent;
+		}
 		String s = "\n<h2 id=\"ref\" class=\"list\">" + lang.getProperty(LANG_REFERENCES_PLACEHOLDER)
 				+ "\n";
-		// EDINT extension: optional references content, per language
-		if (referencesContent != null && !referencesContent.isEmpty()) {
-			s += "<span class=\"markdown\">\n" + referencesContent + "\n</span>\n";
-		}
 		return s;
 	}
 
@@ -1174,9 +1182,28 @@ public class Constants {
 	}
 
 	public static String getDescriptionSectionTitleAndPlaceHolder(Configuration c, Properties lang, String ontologyDescription) {
+		return getDescriptionSectionTitleAndPlaceHolder(c, lang, ontologyDescription, false);
+	}
+
+	/**
+	 * EDINT extension: when {@code verbatim} is true the content is written as-is
+	 * right after the section title line (it is expected to carry its own HTML
+	 * markup, e.g. multiple markdown spans), instead of being wrapped into a
+	 * single <span class="markdown"> element.
+	 */
+	public static String getDescriptionSectionTitleAndPlaceHolder(Configuration c, Properties lang, String ontologyDescription, boolean verbatim) {
 		StringBuilder descriptionString = new StringBuilder(
 				"<h2 id=\"desc\" class=\"list\">" + c.getMainOntology().getName() + ": ");
-		descriptionString.append(lang.getProperty(LANG_DESCRIPTION_TITLE)).append("\n");
+		descriptionString.append(lang.getProperty(LANG_DESCRIPTION_TITLE));
+		if (verbatim) {
+			if (ontologyDescription != null && !ontologyDescription.isEmpty()) {
+				descriptionString.append(ontologyDescription);
+				if (!ontologyDescription.endsWith("\n")) {
+					descriptionString.append("\n");
+				}
+			}
+			return descriptionString.toString();
+		}
 		//add description body from ontology or default
 		descriptionString.append("<span class=\"markdown\">");
 		if (ontologyDescription != null && !ontologyDescription.isEmpty()){

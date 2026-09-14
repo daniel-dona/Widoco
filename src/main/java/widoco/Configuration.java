@@ -91,6 +91,8 @@ public class Configuration {
 	// EDINT extension: extra CSS/JS resources to include in the generated HTML head
 	private final List<String> extraCSS = new ArrayList<>();
 	private final List<String> extraJS = new ArrayList<>();
+	// EDINT extension: extra files/dirs to copy into the output resources folder
+	private final List<String> extraResources = new ArrayList<>();
 	// EDINT extension: skip copying the generic readme.md into the output folder
 	private boolean omitReadme = false;
 	private String googleAnalyticsCode = null;
@@ -429,6 +431,10 @@ public class Configuration {
 			loadPerLanguageSectionProperties();
 			loadExtraResources();
 			this.omitReadme = Boolean.parseBoolean(propertyFile.getProperty(Constants.PF_OMIT_README, "false"));
+		String er = propertyFile.getProperty(Constants.PF_EXTRA_RESOURCES, "");
+		if (!er.isEmpty()) {
+			extraResources.addAll(Arrays.asList(er.split(";")));
+		}
 			mainOntologyMetadata.setCodeRepository(propertyFile.getProperty(Constants.PF_REFERENCES_CODE_REPO, ""));
 		} catch (IOException ex) {
 			// Only a warning, as we can continue safely without a property file.
@@ -1141,12 +1147,20 @@ public class Configuration {
 		return descriptionSectionByLang;
 	}
 
+	public boolean hasPerLanguageDescription(String lang) {
+		return lang != null && descriptionSectionByLang.containsKey(lang);
+	}
+
 	public Map<String, String> getPerLanguageReferences() {
 		return referencesSectionByLang;
 	}
 
 	public List<String> getExtraJS() {
 		return extraJS;
+	}
+
+	public List<String> getExtraResources() {
+		return extraResources;
 	}
 
 	public boolean isOmitReadme() {
