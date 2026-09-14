@@ -283,6 +283,10 @@ public class Constants {
 	public static final String PF_DESCRIPTION_PATH = "pathToDescription";
 	public static final String PF_OVERVIEW_PATH = "pathToOverview";
 	public static final String PF_REFERENCES_PATH = "pathToReferences";
+	// EDINT extension
+	public static final String PF_EXTRA_CSS = "extraCSS";
+	public static final String PF_EXTRA_JS = "extraJS";
+	public static final String PF_OMIT_README = "omitReadme";
 	public static final String PF_REFERENCES_CODE_REPO = "codeRepository";
 
 	/*OWL_API RDF Serializations*/
@@ -419,6 +423,10 @@ public class Constants {
                 + "        This flag can only be used with the htaccess option.\n" +
 "    -excludeIntroduction: Skip the introduction section in the documentation. \n" +
 "    -uniteSections: Write all HTML sections into a single HTML document. \n" +
+"    -omitReadme: Do not generate the generic readme.md in the output folder. \n" +
+"    extraCSS / extraJS (config file): semicolon-separated list of CSS/JS resources to include in the head of the index. \n" +
+"    Per-language sections (config file): abstract-<lang>, description-<lang>, references-<lang>, pathToAbstract-<lang>, \n" +
+"        pathToDescription-<lang>, pathToReferences-<lang> override the language-agnostic content for each language. \n" +
 "    -noPlaceHolderText: Do not add any placeholder text (this will remove intro, abstract (if empty) and " +
 				"description sections)." +
 "    --help: Shows this message and exit.\n";
@@ -471,8 +479,16 @@ public class Constants {
 	}
 
 	public static String getReferencesSection(Configuration c, Properties lang) {
+		return getReferencesSection("", c, lang);
+	}
+
+	public static String getReferencesSection(String referencesContent, Configuration c, Properties lang) {
 		String s = "\n<h2 id=\"ref\" class=\"list\">" + lang.getProperty(LANG_REFERENCES_PLACEHOLDER)
 				+ "\n";
+		// EDINT extension: optional references content, per language
+		if (referencesContent != null && !referencesContent.isEmpty()) {
+			s += "<span class=\"markdown\">\n" + referencesContent + "\n</span>\n";
+		}
 		return s;
 	}
 
@@ -757,6 +773,7 @@ public class Constants {
 		}
 		// add a favicon (rdf logo)
 		document += "<link rel=\"icon\" type=\"image/png\" href=\"" + resourcesFolderName + "/rdf.icon\"/>";
+		document += getExtraResources(c);
 
 		// add a title to the document
 		if (c.getMainOntology().getTitle() != null && !"".equals(c.getMainOntology().getTitle()))
@@ -795,8 +812,8 @@ public class Constants {
 				+ "      function _ls(sel,url){var d=$.Deferred();$(sel).load(url,function(){d.resolve();});return d.promise();}\n";
 		// collect all section loads; call loadHash only after all complete
 		if (c.isIncludeAbstract()) {
-			if(c.getAbstractPath()!=null && !c.getAbstractPath().isEmpty()){
-				document += "      loads.push(_ls(\"#abstract\",\""+c.getAbstractPath()+"\")); \n";
+		if(c.getAbstractPath(c.getCurrentLanguage())!=null && !c.getAbstractPath(c.getCurrentLanguage()).isEmpty()){
+				document += "      loads.push(_ls(\"#abstract\",\""+c.getAbstractPath(c.getCurrentLanguage())+"\")); \n";
 			}else {
 				document += "      loads.push(_ls(\"#abstract\",\"sections/abstract-" + c.getCurrentLanguage() + ".html\")); \n";
 			}
@@ -819,17 +836,17 @@ public class Constants {
 				document += "      loads.push(_ls(\"#overview\",\"sections/overview-" + c.getCurrentLanguage() + ".html\")); \n";
 			}
 		}
-		if (c.isIncludeDescription()){
-			if(c.getDescriptionPath()!=null && !c.getDescriptionPath().isEmpty()){
-				document += "      loads.push(_ls(\"#description\",\""+c.getDescriptionPath()+"\")); \n";
+		if(c.isIncludeDescription()){
+			if(c.getDescriptionPath(c.getCurrentLanguage())!=null && !c.getDescriptionPath(c.getCurrentLanguage()).isEmpty()){
+				document += "      loads.push(_ls(\"#description\",\""+c.getDescriptionPath(c.getCurrentLanguage())+"\")); \n";
 			}else {
 				document += "      loads.push(_ls(\"#description\",\"sections/description-" + c.getCurrentLanguage()
 						+ ".html\")); \n";
 			}
 		}
 		if (c.isIncludeReferences()){
-			if(c.getReferencesPath()!=null && !c.getReferencesPath().isEmpty()){
-				document += "      loads.push(_ls(\"#references\",\""+c.getReferencesPath()+"\")); \n";
+			if(c.getReferencesPath(c.getCurrentLanguage())!=null && !c.getReferencesPath(c.getCurrentLanguage()).isEmpty()){
+				document += "      loads.push(_ls(\"#references\",\""+c.getReferencesPath(c.getCurrentLanguage())+"\")); \n";
 			}else {
 				document += "      loads.push(_ls(\"#references\",\"sections/references-" + c.getCurrentLanguage()
 						+ ".html\")); \n";
@@ -880,6 +897,21 @@ public class Constants {
 		return document;
 	}
 
+	/**
+	 * EDINT extension: head includes for extra CSS/JS resources configured in
+	 * the properties file (extraCSS / extraJS, semicolon-separated).
+	 */
+	private static String getExtraResources(Configuration c) {
+		StringBuilder extra = new StringBuilder();
+		for (String css : c.getExtraCSS()) {
+			extra.append(htmlStyleSheet(css, "screen"));
+		}
+		for (String js : c.getExtraJS()) {
+			extra.append("<script src=\"").append(js).append("\"></script>\n");
+		}
+		return extra.toString();
+	}
+
 	private static String htmlStyleSheet(String resource,String media) {
 		return "<link rel=\"stylesheet\" href=\""+ resource+"\" media=\""+media+"\"/>\n";
 	}
@@ -917,6 +949,7 @@ public class Constants {
         public static String getUnifiedIndexDocument(String resourcesFolderName, Configuration c, LODEParser l, Properties lang, String abs,
                 String intro, String overview, String des, String references, String changelog, String crossRef) {
 		String document = OPENING;
+		document += getExtraResources(c);
 		/* Style selection */
 		if (c.isUseW3CStyle()) {
 			document += getW3CStyleDoc(resourcesFolderName);
@@ -1137,10 +1170,13 @@ public class Constants {
 	}
 
 	public static String getDescriptionSectionTitleAndPlaceHolder(Configuration c, Properties lang) {
+		return getDescriptionSectionTitleAndPlaceHolder(c, lang, c.getMainOntology().getDescription());
+	}
+
+	public static String getDescriptionSectionTitleAndPlaceHolder(Configuration c, Properties lang, String ontologyDescription) {
 		StringBuilder descriptionString = new StringBuilder(
 				"<h2 id=\"desc\" class=\"list\">" + c.getMainOntology().getName() + ": ");
 		descriptionString.append(lang.getProperty(LANG_DESCRIPTION_TITLE)).append("\n");
-		String ontologyDescription = c.getMainOntology().getDescription();
 		//add description body from ontology or default
 		descriptionString.append("<span class=\"markdown\">");
 		if (ontologyDescription != null && !ontologyDescription.isEmpty()){
