@@ -85,6 +85,7 @@ public class Configuration {
 	private final Map<String, String> abstractSectionByLang = new HashMap<>();
 	private final Map<String, String> descriptionSectionByLang = new HashMap<>();
 	private final Map<String, String> referencesSectionByLang = new HashMap<>();
+	private final Map<String, String> introductionSectionByLang = new HashMap<>();
 	private final Map<String, String> abstractPathByLang = new HashMap<>();
 	private final Map<String, String> descriptionPathByLang = new HashMap<>();
 	private final Map<String, String> referencesPathByLang = new HashMap<>();
@@ -1123,6 +1124,10 @@ public class Configuration {
 		return resolveByLang(referencesSectionByLang, lang, "");
 	}
 
+	public String getIntroText(String lang) {
+		return resolveByLang(introductionSectionByLang, lang, introText);
+	}
+
 	public String getAbstractPath(String lang) {
 		return resolveByLang(abstractPathByLang, lang, abstractPath);
 	}
@@ -1179,7 +1184,7 @@ public class Configuration {
 	 */
 	private void loadPerLanguageSectionProperties() {
 		Pattern langKey = Pattern
-				.compile("^(abstract|description|references|pathToAbstract|pathToDescription|pathToReferences)-([A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?)$");
+				.compile("^(abstract|description|references|introduction|pathToAbstract|pathToDescription|pathToReferences)-([A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?)$");
 		for (String key : propertyFile.stringPropertyNames()) {
 			Matcher m = langKey.matcher(key);
 			if (!m.matches()) {
@@ -1197,6 +1202,9 @@ public class Configuration {
 					break;
 				case "references":
 					referencesSectionByLang.put(lang, value);
+					break;
+				case "introduction":
+					introductionSectionByLang.put(lang, value);
 					break;
 				case "pathToAbstract":
 					abstractPathByLang.put(lang, value);

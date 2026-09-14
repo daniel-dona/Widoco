@@ -467,13 +467,17 @@ public class Constants {
 	}
 
 	public static String getIntroductionSectionTitleAndPlaceHolder(Configuration c, Properties lang) {
+		return getIntroductionSectionTitleAndPlaceHolder(c, lang, c.getIntroText(c.getCurrentLanguage()));
+	}
+
+	public static String getIntroductionSectionTitleAndPlaceHolder(Configuration c, Properties lang, String introText) {
 		String s = "<h2 id=\"intro\" class=\"list\">";
 		//check if the content of the intro was found in a metadata property
-		if (c.getIntroText() == null || c.getIntroText().isEmpty()){
+		if (introText == null || introText.isEmpty()){
 			s+= lang.getProperty(LANG_INTRO_PLACEHOLDER);
 		}else{
 			s+= lang.getProperty(LANG_INTRO_TITLE);
-			s+= "<span class=\"markdown\">"+ c.getIntroText() + "</span>\n";
+			s+= "<span class=\"markdown\">"+ introText + "</span>\n";
 		}
 
 		return s;
