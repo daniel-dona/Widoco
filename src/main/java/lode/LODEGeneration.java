@@ -30,7 +30,11 @@ import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.stream.Collectors;
 import java.util.Set;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
@@ -47,6 +51,11 @@ import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyCreationException;
 import org.semanticweb.owlapi.model.OWLOntologyStorageException;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
+import org.semanticweb.owlapi.model.RemoveAxiom;
+import org.semanticweb.owlapi.model.OWLClassAssertionAxiom;
+import org.semanticweb.owlapi.model.OWLNamedIndividual;
+import org.semanticweb.owlapi.model.AxiomType;
+import org.semanticweb.owlapi.model.OWLAnnotation;
 
 import widoco.Configuration;
 
@@ -66,8 +75,10 @@ public class LODEGeneration {
 				lang = "en";
 			}
 			// we have stored the ontology locally
+			OWLOntology model = c.getMainOntology().getOWLAPIModel();
+			removeAgentMetadataIndividuals(model);
 			content = parseImports(c.isUseImported(), c.getMainOntology().getOWLAPIOntologyManager(),
-					c.getMainOntology().getOWLAPIModel());
+					model);
 			content = applyXSLTTransformation(content, c.getOntologyURI(), lang, lodeResources);
 			return (content);
 		} catch (OWLOntologyStorageException | TransformerException | UnsupportedEncodingException e) {
@@ -322,4 +333,54 @@ public class LODEGeneration {
 		return output.toString(StandardCharsets.UTF_8).replace("any u r i", "anyURI");
 	}
 
+
+	/**
+	 * EDINT extension: remove from the model the individuals that are document
+	 * metadata (authors/publishers declared as foaf:Person, foaf:Organization,
+	 * foaf:Agent, schema:Person/Organization/Agent) so they are not listed as
+	 * domain individuals in the overview. Only resources typed exclusively with
+	 * agent classes are removed; individuals with any domain type are kept.
+	 */
+	private static void removeAgentMetadataIndividuals(OWLOntology model) {
+		Set<String> agentClasses = new HashSet<>(Arrays.asList(
+				"http://xmlns.com/foaf/0.1/Person",
+				"http://xmlns.com/foaf/0.1/Organization",
+				"http://xmlns.com/foaf/0.1/Agent",
+				"https://schema.org/Person",
+				"https://schema.org/Organization",
+				"https://schema.org/Agent",
+				"http://schema.org/Person",
+				"http://schema.org/Organization",
+				"http://schema.org/Agent"));
+		OWLOntologyManager manager = model.getOWLOntologyManager();
+		List<RemoveAxiom> toRemove = new ArrayList<>();
+		Set<OWLNamedIndividual> candidates = new HashSet<>();
+		for (OWLClassAssertionAxiom ax : model.axioms(AxiomType.CLASS_ASSERTION)
+				.collect(Collectors.toList())) {
+			if (!(ax.getIndividual() instanceof OWLNamedIndividual)) {
+				continue;
+			}
+			OWLNamedIndividual ind = (OWLNamedIndividual) ax.getIndividual();
+			String typeIRI = ax.getClassExpression().asOWLClass().getIRI().toString();
+			if (agentClasses.contains(typeIRI)) {
+				toRemove.add(new RemoveAxiom(model, ax));
+				candidates.add(ind);
+			} else {
+				candidates.remove(ind);
+			}
+		}
+		for (OWLNamedIndividual ind : candidates) {
+			model.axioms(ind).forEach(ax -> {
+				if (ax.isAnnotated() || ax.getAxiomType() == AxiomType.DECLARATION
+						|| ax.getAxiomType() == AxiomType.CLASS_ASSERTION) {
+					toRemove.add(new RemoveAxiom(model, ax));
+				}
+			});
+		}
+		if (!toRemove.isEmpty()) {
+			logger.info("Removed " + toRemove.size()
+					+ " axioms of agent metadata individuals (foaf/schema Person/Organization/Agent)");
+			manager.applyChanges(toRemove);
+		}
+	}
 }
