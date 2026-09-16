@@ -603,24 +603,26 @@ public class Configuration {
 		String ownNs = normalizeNs(mainOntologyMetadata.getNamespaceURI());
 		Set<String> excluded = new HashSet<>();
 		excluded.add(ownNs);
-		excluded.addAll(Arrays.asList(
+		for (String ns : Arrays.asList(
 				"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
 				"http://www.w3.org/2000/01/rdf-schema#",
 				"http://www.w3.org/2002/07/owl#",
 				"http://www.w3.org/XML/1998/namespace",
 				"http://www.w3.org/2001/XMLSchema#",
 				"http://purl.org/dc/terms/",
-				"http://purl.org/dc/elements/1.1/",
-				"http://xmlns.com/foaf/0.1/",
-				"https://schema.org/", "http://schema.org/",
-				"http://purl.org/vocab/vann/",
-				"http://purl.org/NET/bibo/",
-				"http://purl.org/pav/",
-				"http://www.w3.org/ns/prov#",
-				"http://www.w3.org/2004/02/skos/core#",
-				"http://www.w3.org/ns/dx/prof/",
-				"http://xmlns.com/widoco/",
-				"https://w3id.org/widoco/vocab#"));
+				"http://purl.org/dc/elements/1.1",
+				"http://xmlns.com/foaf/0.1",
+				"https://schema.org", "http://schema.org",
+				"http://purl.org/vocab/vann",
+				"http://purl.org/NET/bibo",
+				"http://purl.org/pav",
+				"http://www.w3.org/ns/prov",
+				"http://www.w3.org/2004/02/skos/core",
+				"http://www.w3.org/ns/dx/prof",
+				"http://xmlns.com/widoco",
+				"https://w3id.org/widoco/vocab")) {
+			excluded.add(normalizeNs(ns));
+		}
 		for (Ontology i : mainOntologyMetadata.getImportedOntologies()) {
 			excluded.add(normalizeNs(i.getNamespaceURI()));
 		}
@@ -664,7 +666,13 @@ public class Configuration {
 			ont.setNamespaceURI(e.getKey());
 			String label = confLabels.getOrDefault(e.getKey(), null);
 			if (isBlank(label)) {
-				label = e.getKey().substring(e.getKey().lastIndexOf('/') + 1);
+				String base = e.getKey().replaceAll("[#/]+$", "");
+				String[] segs = base.substring(base.lastIndexOf('/') + 1).split("-");
+				label = segs[segs.length - 1];
+				// version-only or generic last segment: use the last two segments
+				if (label.matches("(\\d+(\\.\\d+)*)|core|main") && segs.length >= 2) {
+					label = segs[segs.length - 2] + " " + label;
+				}
 				if (isBlank(label)) {
 					label = e.getKey();
 				}
