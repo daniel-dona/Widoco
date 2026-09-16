@@ -96,6 +96,8 @@ public class Configuration {
 	private final List<String> extraResources = new ArrayList<>();
 	// EDINT extension: skip copying the generic readme.md into the output folder
 	private boolean omitReadme = false;
+	// EDINT extension: SKOS thesaurus HTML files (relative links for the index metadata)
+	private final List<String> kosHTML = new ArrayList<>();
 	private String googleAnalyticsCode = null;
 	private String contextURI; // not added with an ontology because it's independent
 
@@ -432,6 +434,11 @@ public class Configuration {
 			loadPerLanguageSectionProperties();
 			loadExtraResources();
 			this.omitReadme = Boolean.parseBoolean(propertyFile.getProperty(Constants.PF_OMIT_README, "false"));
+			this.kosHTML.clear();
+			String kos = propertyFile.getProperty(Constants.PF_KOS_HTML, "");
+			if (!kos.isEmpty()) {
+				kosHTML.addAll(Arrays.asList(kos.split(";")));
+			}
 		String er = propertyFile.getProperty(Constants.PF_EXTRA_RESOURCES, "");
 		if (!er.isEmpty()) {
 			extraResources.addAll(Arrays.asList(er.split(";")));
@@ -484,6 +491,10 @@ public class Configuration {
 		this.mainOntologyMetadata.setThisVersion(versionUri);
 		// process ontology annotations
 		o.annotations().forEach(a -> completeOntologyMetadata(a,o));
+
+		// EDINT extension: restore conf values for fields the ontology does not
+		// annotate (initializeOntology() wiped them when -getOntologyMetadata is used)
+		restoreConfValues(o);
 		// in some cases, properties and data properties extend annotation properties, so we need to process them
 		// separately. In this case we go through all axioms and look for any props that have the own ontology as subject
 		for (OWLAxiom axiom : o.getAxioms()) {
@@ -558,6 +569,65 @@ public class Configuration {
 				namespaceDeclarations.put(prefix,nsManager.getNamespaceForPrefix(prefix));
 			}
 		}
+	}
+
+	/**
+	 * EDINT extension: after reading ontology annotations, restore conf values for
+	 * the fields the ontology does not annotate. The ontology always takes
+	 * precedence; the conf only fills the gaps (e.g. latestVersionURI, publisher,
+	 * status, citation, dates).
+	 */
+	private void restoreConfValues(OWLOntology o) {
+		if (isBlank(mainOntologyMetadata.getLatestVersion())) {
+			mainOntologyMetadata.setLatestVersion(propertyFile.getProperty(Constants.PF_LATEST_VERSION_URI, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getPreviousVersion())) {
+			mainOntologyMetadata.setPreviousVersion(propertyFile.getProperty(Constants.PF_PREVIOUS_VERSION, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getCiteAs())) {
+			mainOntologyMetadata.setCiteAs(propertyFile.getProperty(Constants.PF_CITE_AS, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getStatus())) {
+			mainOntologyMetadata.setStatus(propertyFile.getProperty(Constants.STATUS, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getCreationDate())) {
+			mainOntologyMetadata.setCreationDate(propertyFile.getProperty(Constants.PF_DATE_CREATED, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getIssuedDate())) {
+			mainOntologyMetadata.setIssuedDate(propertyFile.getProperty(Constants.PF_DATE_ISSUED, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getModifiedDate())) {
+			mainOntologyMetadata.setModifiedDate(propertyFile.getProperty(Constants.PF_DATE_MODIFIED, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getTitle())) {
+			mainOntologyMetadata.setTitle(propertyFile.getProperty(Constants.PF_ONT_TITLE, ""));
+		}
+		// publisher agent from conf (name, URL, institution)
+		if (mainOntologyMetadata.getPublisher() == null || isBlank(mainOntologyMetadata.getPublisher().getName())) {
+			Agent ag = new Agent();
+			ag.setName(propertyFile.getProperty(Constants.PF_PUBLISHER, ""));
+			ag.setURL(propertyFile.getProperty(Constants.PF_PUBLISHER_URI, ""));
+			ag.setInstitutionName(propertyFile.getProperty(Constants.PF_PUBLISHER_INSTITUTION, ""));
+			ag.setInstitutionURL(propertyFile.getProperty(Constants.PF_PUBLISHER_INSTITUTION_URI, ""));
+			mainOntologyMetadata.setPublisher(ag);
+		}
+		// creators from conf authors list if the ontology declares none
+		if (mainOntologyMetadata.getCreators().isEmpty() && !isBlank(propertyFile.getProperty(Constants.PF_AUTHORS, ""))) {
+			for (String a : propertyFile.getProperty(Constants.PF_AUTHORS, "").split(";")) {
+				if (!a.trim().isEmpty()) {
+					Agent ag = new Agent();
+					ag.setName(a.trim());
+					mainOntologyMetadata.getCreators().add(ag);
+				}
+			}
+		}
+		// namespaces: initializeOntology() cleared the declarations loaded before
+		// this call, so re-derive them from the ontology
+		loadNamespaceDeclarations(o);
+	}
+
+	private static boolean isBlank(String s) {
+		return s == null || s.trim().isEmpty();
 	}
 
 	private String appendDetails(final String detail, final String prefix, final boolean useFullStop) {
@@ -1170,6 +1240,10 @@ public class Configuration {
 
 	public boolean isOmitReadme() {
 		return omitReadme;
+	}
+
+	public List<String> getKosHTML() {
+		return kosHTML;
 	}
 
 	public void setOmitReadme(boolean omitReadme) {

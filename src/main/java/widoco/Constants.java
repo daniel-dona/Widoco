@@ -288,6 +288,7 @@ public class Constants {
 	public static final String PF_EXTRA_JS = "extraJS";
 	public static final String PF_EXTRA_RESOURCES = "extraResources";
 	public static final String PF_OMIT_README = "omitReadme";
+	public static final String PF_KOS_HTML = "kosHTML";
 	public static final String PF_REFERENCES_CODE_REPO = "codeRepository";
 
 	/*OWL_API RDF Serializations*/
@@ -1125,6 +1126,18 @@ public class Constants {
 						+ "\" style=\"border-width:0\" alt=\"License\" />\n" + "</a>\n<br/>";
 			}
 			head += "</dd>";
+		}
+		// EDINT extension: SKOS thesaurus links (conf key kosHTML, semicolon-separated)
+		if (!c.getKosHTML().isEmpty()) {
+			head += "<dt>Tesauros SKOS:</dt>\n<dd>";
+			for (String kos : c.getKosHTML()) {
+				String name = kos;
+				int slash = kos.lastIndexOf('/');
+				if (slash >= 0) name = kos.substring(slash + 1);
+				String langTag = name.replaceAll("\\.[^.]*$", "");
+				head += "<span><a href=\"" + kos + "\" target=\"_blank\"> <img src=\"https://img.shields.io/badge/Format-HTML-blue.svg\" alt=\"" + langTag + "\" /></a></span> ";
+			}
+			head += "</dd>\n";
 		}
 		// add lang tags here
 		if (c.isCreateWebVowlVisualization()) {
