@@ -289,6 +289,8 @@ public class Constants {
 	public static final String PF_EXTRA_RESOURCES = "extraResources";
 	public static final String PF_OMIT_README = "omitReadme";
 	public static final String PF_KOS_HTML = "kosHTML";
+	public static final String PF_REUSED_VOCABULARY_NAMES = "reusedVocabularyNames";
+	public static final String PF_REUSED_VOCABULARY_URIS = "reusedVocabularyURIs";
 	public static final String PF_REFERENCES_CODE_REPO = "codeRepository";
 
 	/*OWL_API RDF Serializations*/
@@ -1085,6 +1087,10 @@ public class Constants {
 			head += getImports(c.getMainOntology().getImportedOntologies(), l) + "\n";
 		if (!c.getMainOntology().getExtendedOntologies().isEmpty())
 			head += getExtends(c.getMainOntology().getExtendedOntologies(), l) + "\n";
+		// EDINT extension: vocabularies reused without owl:imports
+		if (!c.getReusedVocabularies().isEmpty())
+			head += "<dt>" + ("es".equals(c.getCurrentLanguage()) ? "Reutiliza:" : "Reuses:") + "</dt>\n"
+					+ getOntologies(new ArrayList<>(c.getReusedVocabularies())) + "\n";
 		if (!c.getMainOntology().getSources().isEmpty())
 			head += getURLs(c.getMainOntology().getSources(), l.getProperty(Constants.LANG_SOURCES)) + "\n";
 		if (!c.getMainOntology().getSeeAlso().isEmpty())
