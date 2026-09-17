@@ -24,6 +24,8 @@ import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
 
 import org.semanticweb.owlapi.model.*;
@@ -79,6 +81,13 @@ public class Configuration {
 	private String overviewPath;
 	private String descriptionPath;
 	private String referencesPath;
+	// EDINT extension: per-language section content and paths (keys like "abstract-en", "pathToDescription-es")
+	private final Map<String, String> abstractSectionByLang = new HashMap<>();
+	private final Map<String, String> descriptionSectionByLang = new HashMap<>();
+	private final Map<String, String> referencesSectionByLang = new HashMap<>();
+	private final Map<String, String> abstractPathByLang = new HashMap<>();
+	private final Map<String, String> descriptionPathByLang = new HashMap<>();
+	private final Map<String, String> referencesPathByLang = new HashMap<>();
 	private String googleAnalyticsCode = null;
 	private String contextURI; // not added with an ontology because it's independent
 
@@ -412,6 +421,7 @@ public class Configuration {
 			this.setIntroductionPath(propertyFile.getProperty(Constants.PF_INTRO_PATH, null));
 			this.setOverviewPath(propertyFile.getProperty(Constants.PF_OVERVIEW_PATH, null));
 			this.setReferencesPath(propertyFile.getProperty(Constants.PF_REFERENCES_PATH, null));
+			loadPerLanguageSectionProperties();
 			mainOntologyMetadata.setCodeRepository(propertyFile.getProperty(Constants.PF_REFERENCES_CODE_REPO, ""));
 		} catch (IOException ex) {
 			// Only a warning, as we can continue safely without a property file.
@@ -460,6 +470,10 @@ public class Configuration {
 		this.mainOntologyMetadata.setThisVersion(versionUri);
 		// process ontology annotations
 		o.annotations().forEach(a -> completeOntologyMetadata(a,o));
+
+		// EDINT extension: restore conf values for fields the ontology does not
+		// annotate (initializeOntology() wiped them when -getOntologyMetadata is used)
+		restoreConfValues(o);
 		// in some cases, properties and data properties extend annotation properties, so we need to process them
 		// separately. In this case we go through all axioms and look for any props that have the own ontology as subject
 		for (OWLAxiom axiom : o.getAxioms()) {
@@ -534,6 +548,65 @@ public class Configuration {
 				namespaceDeclarations.put(prefix,nsManager.getNamespaceForPrefix(prefix));
 			}
 		}
+	}
+
+	/**
+	 * EDINT extension: after reading ontology annotations, restore conf values for
+	 * the fields the ontology does not annotate. The ontology always takes
+	 * precedence; the conf only fills the gaps (e.g. latestVersionURI, publisher,
+	 * status, citation, dates).
+	 */
+	private void restoreConfValues(OWLOntology o) {
+		if (isBlank(mainOntologyMetadata.getLatestVersion())) {
+			mainOntologyMetadata.setLatestVersion(propertyFile.getProperty(Constants.PF_LATEST_VERSION_URI, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getPreviousVersion())) {
+			mainOntologyMetadata.setPreviousVersion(propertyFile.getProperty(Constants.PF_PREVIOUS_VERSION, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getCiteAs())) {
+			mainOntologyMetadata.setCiteAs(propertyFile.getProperty(Constants.PF_CITE_AS, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getStatus())) {
+			mainOntologyMetadata.setStatus(propertyFile.getProperty(Constants.STATUS, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getCreationDate())) {
+			mainOntologyMetadata.setCreationDate(propertyFile.getProperty(Constants.PF_DATE_CREATED, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getIssuedDate())) {
+			mainOntologyMetadata.setIssuedDate(propertyFile.getProperty(Constants.PF_DATE_ISSUED, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getModifiedDate())) {
+			mainOntologyMetadata.setModifiedDate(propertyFile.getProperty(Constants.PF_DATE_MODIFIED, ""));
+		}
+		if (isBlank(mainOntologyMetadata.getTitle())) {
+			mainOntologyMetadata.setTitle(propertyFile.getProperty(Constants.PF_ONT_TITLE, ""));
+		}
+		// publisher agent from conf (name, URL, institution)
+		if (mainOntologyMetadata.getPublisher() == null || isBlank(mainOntologyMetadata.getPublisher().getName())) {
+			Agent ag = new Agent();
+			ag.setName(propertyFile.getProperty(Constants.PF_PUBLISHER, ""));
+			ag.setURL(propertyFile.getProperty(Constants.PF_PUBLISHER_URI, ""));
+			ag.setInstitutionName(propertyFile.getProperty(Constants.PF_PUBLISHER_INSTITUTION, ""));
+			ag.setInstitutionURL(propertyFile.getProperty(Constants.PF_PUBLISHER_INSTITUTION_URI, ""));
+			mainOntologyMetadata.setPublisher(ag);
+		}
+		// creators from conf authors list if the ontology declares none
+		if (mainOntologyMetadata.getCreators().isEmpty() && !isBlank(propertyFile.getProperty(Constants.PF_AUTHORS, ""))) {
+			for (String a : propertyFile.getProperty(Constants.PF_AUTHORS, "").split(";")) {
+				if (!a.trim().isEmpty()) {
+					Agent ag = new Agent();
+					ag.setName(a.trim());
+					mainOntologyMetadata.getCreators().add(ag);
+				}
+			}
+		}
+		// namespaces: initializeOntology() cleared the declarations loaded before
+		// this call, so re-derive them from the ontology
+		loadNamespaceDeclarations(o);
+	}
+
+	private static boolean isBlank(String s) {
+		return s == null || s.trim().isEmpty();
 	}
 
 	private String appendDetails(final String detail, final String prefix, final boolean useFullStop) {
@@ -1075,6 +1148,99 @@ public class Configuration {
 
 	public String getAbstractPath() {
 		return abstractPath;
+	}
+
+	/**
+	 * EDINT extension: resolves a per-language property with fallback to the
+	 * language-agnostic value.
+	 */
+	private String resolveByLang(Map<String, String> byLang, String lang, String fallback) {
+		if (lang != null && byLang.containsKey(lang)) {
+			return byLang.get(lang);
+		}
+		return fallback;
+	}
+
+	public String getAbstractSection(String lang) {
+		return resolveByLang(abstractSectionByLang, lang, abstractSection);
+	}
+
+	public String getDescription(String lang) {
+		return resolveByLang(descriptionSectionByLang, lang, mainOntologyMetadata.getDescription());
+	}
+
+	public String getReferences(String lang) {
+		return resolveByLang(referencesSectionByLang, lang, "");
+	}
+
+	public String getAbstractPath(String lang) {
+		return resolveByLang(abstractPathByLang, lang, abstractPath);
+	}
+
+	public String getDescriptionPath(String lang) {
+		return resolveByLang(descriptionPathByLang, lang, descriptionPath);
+	}
+
+	public String getReferencesPath(String lang) {
+		return resolveByLang(referencesPathByLang, lang, referencesPath);
+	}
+
+
+	public Map<String, String> getPerLanguageAbstractSections() {
+		return abstractSectionByLang;
+	}
+
+	public Map<String, String> getPerLanguageDescriptions() {
+		return descriptionSectionByLang;
+	}
+
+	public boolean hasPerLanguageDescription(String lang) {
+		return lang != null && descriptionSectionByLang.containsKey(lang);
+	}
+
+	public Map<String, String> getPerLanguageReferences() {
+		return referencesSectionByLang;
+	}
+
+
+	/**
+	 * EDINT extension: loads per-language section content and paths from keys
+	 * with a language suffix, e.g. "abstract-en", "description-es",
+	 * "references-en", "pathToAbstract-en", "pathToDescription-es",
+	 * "pathToReferences-en".
+	 */
+	private void loadPerLanguageSectionProperties() {
+		Pattern langKey = Pattern
+				.compile("^(abstract|description|references|pathToAbstract|pathToDescription|pathToReferences)-([A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?)$");
+		for (String key : propertyFile.stringPropertyNames()) {
+			Matcher m = langKey.matcher(key);
+			if (!m.matches()) {
+				continue;
+			}
+			String value = propertyFile.getProperty(key, "");
+			String lang = m.group(2);
+			switch (m.group(1)) {
+				case "abstract":
+					abstractSectionByLang.put(lang, value);
+					includeAbstract = true;
+					break;
+				case "description":
+					descriptionSectionByLang.put(lang, value);
+					break;
+				case "references":
+					referencesSectionByLang.put(lang, value);
+					break;
+				case "pathToAbstract":
+					abstractPathByLang.put(lang, value);
+					break;
+				case "pathToDescription":
+					descriptionPathByLang.put(lang, value);
+					break;
+				case "pathToReferences":
+					referencesPathByLang.put(lang, value);
+					break;
+			}
+		}
 	}
 
 	public String getDescriptionPath() {
