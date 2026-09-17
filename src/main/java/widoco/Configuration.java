@@ -104,6 +104,45 @@ public class Configuration {
 	private final Map<String, String> widocoAnnotationValues = new HashMap<>();
 	// EDINT extension: widoco:vocabularyLabel entries (namespace -> lang -> label)
 	private final Map<String, Map<String, String>> vocabularyLabels = new HashMap<>();
+	// EDINT extension: load vocabularies (local mappers, then network) to read their titles
+	private boolean resolveVocabularyTitles = true;
+	// EDINT extension: cache of resolved titles (IRI -> label)
+	private final Map<String, String> resolvedVocabularyTitles = new HashMap<>();
+	// EDINT extension: persistent cache so repeated runs do not hit the network
+	private static Properties vocabularyTitleCache;
+	private static java.io.File vocabularyTitleCacheFile;
+
+	private static synchronized Properties vocabularyTitleCache() {
+		if (vocabularyTitleCache == null) {
+			vocabularyTitleCache = new Properties();
+			String path = System.getenv("WIDOCO_VOCABULARY_CACHE");
+			vocabularyTitleCacheFile = new java.io.File(path != null ? path
+					: System.getProperty("user.home") + "/.widoco/vocabulary-titles.properties");
+			if (vocabularyTitleCacheFile.isFile()) {
+				try (java.io.InputStreamReader r = new java.io.InputStreamReader(
+						new java.io.FileInputStream(vocabularyTitleCacheFile), "UTF-8")) {
+					vocabularyTitleCache.load(r);
+				} catch (Exception e) {
+					// cache is optional
+				}
+			}
+		}
+		return vocabularyTitleCache;
+	}
+
+	private static synchronized void storeVocabularyTitle(String iri, String label) {
+		Properties cache = vocabularyTitleCache();
+		cache.setProperty(iri, label == null ? "" : label);
+		if (vocabularyTitleCacheFile != null) {
+			vocabularyTitleCacheFile.getParentFile().mkdirs();
+			try (java.io.OutputStreamWriter w = new java.io.OutputStreamWriter(
+					new java.io.FileOutputStream(vocabularyTitleCacheFile), "UTF-8")) {
+				cache.store(w, "Resolved vocabulary titles (IRI=label)");
+			} catch (Exception e) {
+				// writing the cache is best effort
+			}
+		}
+	}
 	private String googleAnalyticsCode = null;
 	private String contextURI; // not added with an ontology because it's independent
 
@@ -441,6 +480,8 @@ public class Configuration {
 			loadPerLanguageSectionProperties();
 			loadExtraResources();
 			this.omitReadme = Boolean.parseBoolean(propertyFile.getProperty(Constants.PF_OMIT_README, "false"));
+			this.resolveVocabularyTitles = Boolean.parseBoolean(
+					propertyFile.getProperty(Constants.PF_RESOLVE_VOCAB_TITLES, "true"));
 			this.kosHTML.clear();
 			String kos = propertyFile.getProperty(Constants.PF_KOS_HTML, "");
 			if (!kos.isEmpty()) {
@@ -660,7 +701,61 @@ public class Configuration {
 		if (annotationLabels.containsKey(ns)) {
 			return annotationLabels.get(ns);
 		}
-		return null;
+		// last resort before the IRI segment: load the vocabulary and read its title
+		String loaded = loadVocabularyTitle(iri);
+		return isBlank(loaded) ? null : loaded;
+	}
+
+	/**
+	 * EDINT extension: tries to load the vocabulary identified by the given IRI
+	 * (local IRI mappers first, network afterwards) with a bounded timeout and
+	 * returns its dcterms:title/rdfs:label in the current language. Results are
+	 * cached per run.
+	 */
+	private String loadVocabularyTitle(String iri) {
+		if (!resolveVocabularyTitles || isBlank(iri)) {
+			return null;
+		}
+		if (resolvedVocabularyTitles.containsKey(iri)) {
+			return resolvedVocabularyTitles.get(iri);
+		}
+		String cached = vocabularyTitleCache().getProperty(iri);
+		if (cached != null) {
+			resolvedVocabularyTitles.put(iri, cached);
+			return isBlank(cached) ? null : cached;
+		}
+		String label = null;
+		java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newSingleThreadExecutor();
+		try {
+			java.util.concurrent.Future<OWLOntology> task = pool.submit(() -> {
+				OWLOntologyManager manager = mainOntologyMetadata.getOWLAPIOntologyManager();
+				return manager.loadOntology(IRI.create(iri));
+			});
+			OWLOntology loaded = task.get(3, java.util.concurrent.TimeUnit.SECONDS);
+			label = getAnnotationLabel(loaded, IRI.create(iri));
+			if (isBlank(label)) {
+				for (OWLAnnotation ton : loaded.annotations().collect(java.util.stream.Collectors.toSet())) {
+					String prop = ton.getProperty().getIRI().getIRIString();
+					if (Constants.PROP_DCTERMS_TITLE.equals(prop) || Constants.PROP_RDFS_LABEL.equals(prop)
+							|| Constants.PROP_DC_TITLE.equals(prop)) {
+						String value = WidocoUtils.getValueAsLiteralOrURI(ton.getValue());
+						String lang = ton.getValue().isLiteral()
+								? ton.getValue().asLiteral().get().getLang() : "";
+						if (isBlank(label) || (currentLanguage != null && currentLanguage.equals(lang))) {
+							label = value;
+						}
+					}
+				}
+			}
+		} catch (Exception e) {
+			// not resolvable (offline, 404, HTML...): fall back to the IRI segment
+			label = null;
+		} finally {
+			pool.shutdownNow();
+		}
+		resolvedVocabularyTitles.put(iri, label == null ? "" : label);
+		storeVocabularyTitle(iri, label);
+		return label;
 	}
 
 	/** Last full segment of an IRI, prettified ("direccion-postal" -> "Direccion Postal"). */
@@ -1521,6 +1616,10 @@ public class Configuration {
 
 	public boolean isOmitReadme() {
 		return omitReadme;
+	}
+
+	public void setResolveVocabularyTitles(boolean resolveVocabularyTitles) {
+		this.resolveVocabularyTitles = resolveVocabularyTitles;
 	}
 
 	public List<String> getKosHTML() {

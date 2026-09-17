@@ -223,6 +223,8 @@ public class Constants {
 	// widoco:vocabularyLabel [ widoco:vocabularyIRI <iri> ; rdfs:label "..."@lang ]
 	public static final String PROP_WIDOCO_VOCABULARY_LABEL = NS_WIDOCO + "vocabularyLabel";
 	public static final String PROP_WIDOCO_VOCABULARY_IRI = NS_WIDOCO + "vocabularyIRI";
+	// EDINT extension: try to resolve vocabulary titles by loading the vocabulary
+	public static final String PF_RESOLVE_VOCAB_TITLES = "resolveVocabularyTitles";
 	public static final String PROP_WIDOCO_INTRODUCTION = NS_WIDOCO + "introduction";
 	public static final String PROP_WIDOCO_RDF_XML= NS_WIDOCO + "rdfxmlSerialization";
 	public static final String PROP_WIDOCO_NT= NS_WIDOCO + "ntSerialization";
