@@ -536,6 +536,8 @@ public class Configuration {
 		}
 	}
 
+
+
 	private String appendDetails(final String detail, final String prefix, final boolean useFullStop) {
 		if (detail == null || detail.isEmpty()) {
 			return "";
