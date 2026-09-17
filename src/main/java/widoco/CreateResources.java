@@ -125,17 +125,18 @@ public class CreateResources {
 		// serialize the model in different serializations.
 		OWLOntologyManager om = c.getMainOntology().getOWLAPIOntologyManager();
 		OWLOntology o = c.getMainOntology().getOWLAPIModel();
-		// EDINT extension: use the file names configured (OWL annotation > conf >
-		// default) so that the written files match the links in the HTML
+		// EDINT extension: honor configured serialization file names when they are
+		// relative names (OWL annotation > conf > default). Absolute values (URIs
+		// used as links) keep the default file name, as before.
 		Map<String, String> ser = c.getMainOntology().getSerializations();
 		WidocoUtils.writeModel(om, o, new RDFXMLDocumentFormat(),
-				folderOut + File.separator + ser.getOrDefault(Constants.RDF_XML, "ontology.owl"));
+				folderOut + File.separator + serializationFileName(ser.get(Constants.RDF_XML), "ontology.owl"));
 		WidocoUtils.writeModel(om, o, new TurtleDocumentFormat(),
-				folderOut + File.separator + ser.getOrDefault(Constants.TTL, "ontology.ttl"));
+				folderOut + File.separator + serializationFileName(ser.get(Constants.TTL), "ontology.ttl"));
 		WidocoUtils.writeModel(om, o, new NTriplesDocumentFormat(),
-				folderOut + File.separator + ser.getOrDefault(Constants.NT, "ontology.nt"));
+				folderOut + File.separator + serializationFileName(ser.get(Constants.NT), "ontology.nt"));
 		WidocoUtils.writeModel(om, o, new RDFJsonLDDocumentFormat(),
-				folderOut + File.separator + ser.getOrDefault(Constants.JSON_LD, "ontology.jsonld"));
+				folderOut + File.separator + serializationFileName(ser.get(Constants.JSON_LD), "ontology.jsonld"));
 		if (c.isIncludeIndex()) {
                     if(c.isIncludeAllSectionsInOneDocument()){
                         createUnifiedIndexDocument(abs,intro,overview,description,crossref,ref,changeLog, folderOut, c, lode, languageFile);
@@ -771,4 +772,20 @@ public class CreateResources {
 		}
 	}
 
+
+	/**
+	 * EDINT extension: returns the file name to use for a serialization. Only
+	 * relative names (e.g. "ontology.rdf") are honored; absolute values (URIs
+	 * used as links) and empty values fall back to the default name.
+	 */
+	private static String serializationFileName(String configured, String defaultName) {
+		if (configured == null || configured.trim().isEmpty()) {
+			return defaultName;
+		}
+		String v = configured.trim();
+		if (v.contains("://") || v.startsWith("/") || v.startsWith("file:")) {
+			return defaultName;
+		}
+		return v;
+	}
 }
