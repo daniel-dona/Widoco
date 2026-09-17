@@ -734,6 +734,11 @@ public class Configuration {
 			OWLOntology loaded = task.get(3, java.util.concurrent.TimeUnit.SECONDS);
 			label = getAnnotationLabel(loaded, IRI.create(iri));
 			if (isBlank(label)) {
+				// the document may declare its own ontology IRI instead of the namespace
+				label = loaded.getOntologyID().getOntologyIRI()
+						.map(own -> getAnnotationLabel(loaded, own)).orElse(null);
+			}
+			if (isBlank(label)) {
 				for (OWLAnnotation ton : loaded.annotations().collect(java.util.stream.Collectors.toSet())) {
 					String prop = ton.getProperty().getIRI().getIRIString();
 					if (Constants.PROP_DCTERMS_TITLE.equals(prop) || Constants.PROP_RDFS_LABEL.equals(prop)
