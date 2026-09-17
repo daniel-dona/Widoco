@@ -446,16 +446,25 @@ public class Configuration {
 			// versionUri = "[Version URI not provided]"; // if it is not present, do not
 			// show it
 		}
-		if (isDisplayDirectImportsOnly()) {
-			// imports of the ontology.
-			o.directImports().forEach(i -> {
-				initializeImportedOntology(i);
-			});
-		} else {
-			// imports of the ontology.
+		// EDINT extension: process the declared owl:imports IRIs so that imports
+		// that do not resolve are still listed (with the last IRI segment or a
+		// local dcterms:title/rdfs:label as name), plus the rest of the loaded
+		// imports closure when direct-imports-only is not set.
+		Set<IRI> importIRIs = new LinkedHashSet<>();
+		for (OWLImportsDeclaration decl : o.importsDeclarations().collect(java.util.stream.Collectors.toSet())) {
+			importIRIs.add(decl.getIRI());
+		}
+		if (!isDisplayDirectImportsOnly()) {
 			o.imports().forEach(i -> {
-				initializeImportedOntology(i);
+				i.getOntologyID().getOntologyIRI().ifPresent(importIRIs::add);
 			});
+		}
+		Map<IRI, OWLOntology> loadedImports = new HashMap<>();
+		o.imports().forEach(i -> {
+			i.getOntologyID().getOntologyIRI().ifPresent(iri -> loadedImports.put(iri, i));
+		});
+		for (IRI iri : importIRIs) {
+			initializeImportedOntology(iri, o, loadedImports.get(iri));
 		}
 		this.mainOntologyMetadata.setThisVersion(versionUri);
 		// process ontology annotations
@@ -535,6 +544,8 @@ public class Configuration {
 			}
 		}
 	}
+
+
 
 	private String appendDetails(final String detail, final String prefix, final boolean useFullStop) {
 		if (detail == null || detail.isEmpty()) {
@@ -1438,12 +1449,58 @@ public class Configuration {
 	}
 
 	private void initializeImportedOntology(OWLOntology i) {
-		// get name, get URI, add to the config
+		i.getOntologyID().getOntologyIRI().ifPresent(iri -> initializeImportedOntology(iri, i, i));
+	}
+
+	/**
+	 * EDINT extension: resolve the display name of an imported ontology from the
+	 * OWL data only, in this order: (1) dcterms:title/rdfs:label of the loaded
+	 * imported ontology, (2) a local dcterms:title/rdfs:label about the imported
+	 * IRI declared in the importing document, (3) the last segment of the IRI.
+	 */
+	private void initializeImportedOntology(IRI iri, OWLOntology main, OWLOntology loaded) {
+		String name = null;
+		if (loaded != null) {
+			name = getAnnotationLabel(loaded, iri);
+		}
+		if (isBlank(name)) {
+			name = getAnnotationLabel(main, iri);
+		}
+		if (isBlank(name)) {
+			String path = iri.toURI().getPath();
+			String segment = path != null && path.contains("/")
+					? path.substring(path.lastIndexOf('/') + 1)
+					: iri.toString();
+			if (segment.isEmpty()) {
+				segment = iri.toString();
+			}
+			name = segment;
+		}
 		Ontology ont = new Ontology();
-		ont.setNamespaceURI(i.getOntologyID().getOntologyIRI().get().toString());
-		ont.setName(i.getOntologyID().getOntologyIRI().get().getShortForm().replace("<", "&lt;").replace(">", "&gt;"));
-		// added replacements so they will be shown in html
+		ont.setNamespaceURI(iri.toString());
+		ont.setName(name.replace("<", "&lt;").replace(">", "&gt;"));
 		mainOntologyMetadata.getImportedOntologies().add(ont);
+	}
+
+	private String getAnnotationLabel(OWLOntology o, IRI subject) {
+		String anyLang = null;
+		for (OWLAnnotationAssertionAxiom a : o.annotationAssertionAxioms(subject).collect(java.util.stream.Collectors.toSet())) {
+			String prop = a.getProperty().getIRI().getIRIString();
+			if (Constants.PROP_DCTERMS_TITLE.equals(prop) || Constants.PROP_RDFS_LABEL.equals(prop)) {
+				if (!a.getValue().isLiteral()) {
+					continue;
+				}
+				String value = a.getValue().asLiteral().get().getLiteral();
+				String lang = a.getValue().asLiteral().get().getLang();
+				if (this.currentLanguage != null && this.currentLanguage.equals(lang)) {
+					return value;
+				}
+				if (anyLang == null) {
+					anyLang = value;
+				}
+			}
+		}
+		return anyLang;
 	}
 
     public boolean isIncludeAllSectionsInOneDocument() {
@@ -1460,5 +1517,9 @@ public class Configuration {
 
 	public void setIntroText(String introText) {
 		this.introText = introText;
+	}
+
+	private static boolean isBlank(String s) {
+		return s == null || s.trim().isEmpty();
 	}
 }
