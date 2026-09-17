@@ -26,6 +26,7 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import javax.swing.JOptionPane;
 import lode.LODEGeneration;
@@ -219,10 +220,10 @@ public class CreateResources {
 	 */
 	private static String createAbstractSection(String path, Configuration c, Properties languageFile) {
             String textToWrite;
-		if ((c.getAbstractPath() != null) && (!"".equals(c.getAbstractPath()))) {
-                    textToWrite = WidocoUtils.readExternalResource(c.getAbstractPath());
+		if ((c.getAbstractPath(c.getCurrentLanguage()) != null) && (!"".equals(c.getAbstractPath(c.getCurrentLanguage())))) {
+                    textToWrite = WidocoUtils.readExternalResource(c.getAbstractPath(c.getCurrentLanguage()));
 		} else {
-                    textToWrite = Constants.getAbstractSection(c.getAbstractSection(), c, languageFile);
+                    textToWrite = Constants.getAbstractSection(c.getAbstractSection(c.getCurrentLanguage()), c, languageFile);
                     if(!c.isIncludeAllSectionsInOneDocument()){
 			saveDocument(path + File.separator + "abstract-" + c.getCurrentLanguage() + ".html",
 					textToWrite, c);
@@ -303,10 +304,11 @@ public class CreateResources {
 
 	private static String createDescriptionSection(String path, Configuration c, Properties lang) {
             String textToWrite;
-            if ((c.getDescriptionPath() != null) && (!"".equals(c.getDescriptionPath()))) {
-                textToWrite = WidocoUtils.readExternalResource(c.getDescriptionPath());
+            if ((c.getDescriptionPath(c.getCurrentLanguage()) != null) && (!"".equals(c.getDescriptionPath(c.getCurrentLanguage())))) {
+                textToWrite = WidocoUtils.readExternalResource(c.getDescriptionPath(c.getCurrentLanguage()));
             } else {
-                textToWrite = Constants.getDescriptionSectionTitleAndPlaceHolder(c, lang);
+                textToWrite = Constants.getDescriptionSectionTitleAndPlaceHolder(c, lang,
+                        c.getDescription(c.getCurrentLanguage()), c.hasPerLanguageDescription(c.getCurrentLanguage()));
                 if(!c.isIncludeAllSectionsInOneDocument()){
                     saveDocument(path + File.separator + "description-" + c.getCurrentLanguage() + ".html",
                                     textToWrite, c);
@@ -367,10 +369,10 @@ public class CreateResources {
 
 	private static String createReferencesSection(String path, Configuration c, Properties lang) {
             String textToWrite;
-            if ((c.getReferencesPath() != null) && (!"".equals(c.getReferencesPath()))) {
-                textToWrite = WidocoUtils.readExternalResource(c.getReferencesPath());
+            if ((c.getReferencesPath(c.getCurrentLanguage()) != null) && (!"".equals(c.getReferencesPath(c.getCurrentLanguage())))) {
+                textToWrite = WidocoUtils.readExternalResource(c.getReferencesPath(c.getCurrentLanguage()));
             } else {
-                textToWrite =  Constants.getReferencesSection(c, lang);
+                textToWrite =  Constants.getReferencesSection(c.getReferences(c.getCurrentLanguage()), c, lang);
                 if(!c.isIncludeAllSectionsInOneDocument()){
                     saveDocument(path + File.separator + "references-" + c.getCurrentLanguage() + ".html",
                                    textToWrite, c);
@@ -510,6 +512,13 @@ public class CreateResources {
 	public static void saveConfigFile(String path, Configuration conf) throws IOException {
 		String textProperties = "\n";// the first line I leave an intro because there have been problems.
 		textProperties += Constants.PF_ABSTRACT_SECTION_CONTENT + "=" + conf.getAbstractSection() + "\n";
+		// EDINT extension: persist per-language sections and extra resources
+		for (Map.Entry<String, String> e : conf.getPerLanguageAbstractSections().entrySet())
+			textProperties += Constants.PF_ABSTRACT_SECTION_CONTENT + "-" + e.getKey() + "=" + e.getValue() + "\n";
+		for (Map.Entry<String, String> e : conf.getPerLanguageDescriptions().entrySet())
+			textProperties += Constants.PF_DESCRIPTION + "-" + e.getKey() + "=" + e.getValue() + "\n";
+		for (Map.Entry<String, String> e : conf.getPerLanguageReferences().entrySet())
+			textProperties += "references" + "-" + e.getKey() + "=" + e.getValue() + "\n";
 		textProperties += Constants.PF_ONT_TITLE + "=" + conf.getMainOntology().getTitle() + "\n";
 		textProperties += Constants.PF_ONT_PREFIX + "=" + conf.getMainOntology().getNamespacePrefix() + "\n";
 		textProperties += Constants.PF_ONT_NAMESPACE_URI + "=" + conf.getMainOntology().getNamespaceURI() + "\n";
@@ -727,5 +736,6 @@ public class CreateResources {
 			}
 		}
 	}
+
 
 }
