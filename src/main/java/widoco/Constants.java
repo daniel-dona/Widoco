@@ -275,6 +275,8 @@ public class Constants {
 	public static final String PF_FUNDERS = "funders";
 	public static final String PF_FUNDING = "fundingGrants";
 	public static final String PF_SERIALIZATION_NT = "NTSerialization";
+	// historical alias used by older EDINT confs
+	public static final String PF_SERIALIZATION_N3 = "N3Serialization";
 	public static final String PF_SERIALIZATION_JSON = "JSONLDSerialization";
 	public static final String PF_SERIALIZATION_RDF = "RDFXMLSerialization";
 	public static final String PF_SERIALIZATION_TTL = "TurtleSerialization";

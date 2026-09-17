@@ -125,10 +125,17 @@ public class CreateResources {
 		// serialize the model in different serializations.
 		OWLOntologyManager om = c.getMainOntology().getOWLAPIOntologyManager();
 		OWLOntology o = c.getMainOntology().getOWLAPIModel();
-		WidocoUtils.writeModel(om, o, new RDFXMLDocumentFormat(), folderOut + File.separator + "ontology.owl");
-		WidocoUtils.writeModel(om, o, new TurtleDocumentFormat(), folderOut + File.separator + "ontology.ttl");
-		WidocoUtils.writeModel(om, o, new NTriplesDocumentFormat(), folderOut + File.separator + "ontology.nt");
-		WidocoUtils.writeModel(om, o, new RDFJsonLDDocumentFormat(), folderOut + File.separator + "ontology.jsonld");
+		// EDINT extension: use the file names configured (OWL annotation > conf >
+		// default) so that the written files match the links in the HTML
+		Map<String, String> ser = c.getMainOntology().getSerializations();
+		WidocoUtils.writeModel(om, o, new RDFXMLDocumentFormat(),
+				folderOut + File.separator + ser.getOrDefault(Constants.RDF_XML, "ontology.owl"));
+		WidocoUtils.writeModel(om, o, new TurtleDocumentFormat(),
+				folderOut + File.separator + ser.getOrDefault(Constants.TTL, "ontology.ttl"));
+		WidocoUtils.writeModel(om, o, new NTriplesDocumentFormat(),
+				folderOut + File.separator + ser.getOrDefault(Constants.NT, "ontology.nt"));
+		WidocoUtils.writeModel(om, o, new RDFJsonLDDocumentFormat(),
+				folderOut + File.separator + ser.getOrDefault(Constants.JSON_LD, "ontology.jsonld"));
 		if (c.isIncludeIndex()) {
                     if(c.isIncludeAllSectionsInOneDocument()){
                         createUnifiedIndexDocument(abs,intro,overview,description,crossref,ref,changeLog, folderOut, c, lode, languageFile);
