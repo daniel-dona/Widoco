@@ -79,6 +79,8 @@ public class Configuration {
 	private String overviewPath;
 	private String descriptionPath;
 	private String referencesPath;
+	// EDINT extension: vocabularies reused without owl:imports (detected from the model)
+	private final List<Ontology> reusedVocabularies = new ArrayList<>();
 	private String googleAnalyticsCode = null;
 	private String contextURI; // not added with an ontology because it's independent
 
@@ -460,6 +462,9 @@ public class Configuration {
 		this.mainOntologyMetadata.setThisVersion(versionUri);
 		// process ontology annotations
 		o.annotations().forEach(a -> completeOntologyMetadata(a,o));
+
+		// EDINT extension: detect vocabularies reused without owl:imports
+		detectReusedVocabularies(o);
 		// in some cases, properties and data properties extend annotation properties, so we need to process them
 		// separately. In this case we go through all axioms and look for any props that have the own ontology as subject
 		for (OWLAxiom axiom : o.getAxioms()) {
@@ -535,6 +540,115 @@ public class Configuration {
 			}
 		}
 	}
+
+	/**
+	 * EDINT extension: detect vocabularies reused without owl:imports. Collects
+	 * the namespaces of external entities referenced from subClassOf,
+	 * subPropertyOf, domain/range and individual class assertions, excluding the
+	 * ontology namespace, common metadata namespaces and namespaces already
+	 * listed as imports or extensions. Labels come from the conf keys
+	 * reusedVocabularyNames/reusedVocabularyURIs when provided.
+	 */
+	private void detectReusedVocabularies(OWLOntology o) {
+		reusedVocabularies.clear();
+		String ownNs = normalizeNs(mainOntologyMetadata.getNamespaceURI());
+		Set<String> excluded = new HashSet<>();
+		excluded.add(ownNs);
+		for (String ns : Arrays.asList(
+				"http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+				"http://www.w3.org/2000/01/rdf-schema#",
+				"http://www.w3.org/2002/07/owl#",
+				"http://www.w3.org/XML/1998/namespace",
+				"http://www.w3.org/2001/XMLSchema#",
+				"http://purl.org/dc/terms/",
+				"http://purl.org/dc/elements/1.1",
+				"http://xmlns.com/foaf/0.1",
+				"https://schema.org", "http://schema.org",
+				"http://purl.org/vocab/vann",
+				"http://purl.org/NET/bibo",
+				"http://purl.org/pav",
+				"http://www.w3.org/ns/prov",
+				"http://www.w3.org/2004/02/skos/core",
+				"http://www.w3.org/ns/dx/prof",
+				"http://xmlns.com/widoco",
+				"https://w3id.org/widoco/vocab")) {
+			excluded.add(normalizeNs(ns));
+		}
+		for (Ontology i : mainOntologyMetadata.getImportedOntologies()) {
+			excluded.add(normalizeNs(i.getNamespaceURI()));
+		}
+		for (Ontology e : mainOntologyMetadata.getExtendedOntologies()) {
+			excluded.add(normalizeNs(e.getNamespaceURI()));
+		}
+		Map<String, Integer> nsCount = new HashMap<>();
+		for (OWLAxiom ax : o.axioms().collect(java.util.stream.Collectors.toList())) {
+			AxiomType<?> t = ax.getAxiomType();
+			boolean relevant = t == AxiomType.SUBCLASS_OF || t == AxiomType.EQUIVALENT_CLASSES
+					|| t == AxiomType.SUB_OBJECT_PROPERTY || t == AxiomType.EQUIVALENT_OBJECT_PROPERTIES
+					|| t == AxiomType.EQUIVALENT_DATA_PROPERTIES
+					|| t == AxiomType.SUB_DATA_PROPERTY
+					|| t == AxiomType.OBJECT_PROPERTY_DOMAIN || t == AxiomType.OBJECT_PROPERTY_RANGE
+					|| t == AxiomType.DATA_PROPERTY_DOMAIN || t == AxiomType.DATA_PROPERTY_RANGE
+					|| t == AxiomType.CLASS_ASSERTION;
+			if (!relevant) {
+				continue;
+			}
+			for (OWLEntity e : ax.getSignature()) {
+				if (e.isOWLClass() || e.isOWLObjectProperty() || e.isOWLDataProperty()) {
+					String ns = normalizeNs(e.getIRI().getIRIString().startsWith("urn:")
+							? e.getIRI().toString() : namespaceOf(e.getIRI().toString()));
+					if (!excluded.contains(ns)) {
+						nsCount.merge(ns, 1, Integer::sum);
+					}
+				}
+			}
+		}
+		// labels from conf (reusedVocabularyNames/URIs)
+		Map<String, String> confLabels = new HashMap<>();
+		String[] names = propertyFile.getProperty(Constants.PF_REUSED_VOCABULARY_NAMES, "").split(";");
+		String[] uris = propertyFile.getProperty(Constants.PF_REUSED_VOCABULARY_URIS, "").split(";");
+		for (int i = 0; i < names.length && i < uris.length; i++) {
+			if (!isBlank(names[i])) {
+				confLabels.put(normalizeNs(uris[i]), names[i]);
+			}
+		}
+		for (Map.Entry<String, Integer> e : nsCount.entrySet()) {
+			Ontology ont = new Ontology();
+			ont.setNamespaceURI(e.getKey());
+			String label = confLabels.getOrDefault(e.getKey(), null);
+			if (isBlank(label)) {
+				String base = e.getKey().replaceAll("[#/]+$", "");
+				String[] segs = base.substring(base.lastIndexOf('/') + 1).split("-");
+				label = segs[segs.length - 1];
+				// version-only or generic last segment: use the last two segments
+				if (label.matches("(\\d+(\\.\\d+)*)|core|main") && segs.length >= 2) {
+					label = segs[segs.length - 2] + " " + label;
+				}
+				if (isBlank(label)) {
+					label = e.getKey();
+				}
+			}
+			ont.setName(label);
+			reusedVocabularies.add(ont);
+		}
+		reusedVocabularies.sort(Comparator.comparing(Ontology::getName));
+	}
+
+	private static String namespaceOf(String iri) {
+		int hash = iri.lastIndexOf('#');
+		int slash = iri.lastIndexOf('/');
+		int cut = Math.max(hash, slash);
+		return cut > 0 ? iri.substring(0, cut + 1) : iri;
+	}
+
+	private static String normalizeNs(String ns) {
+		if (ns == null) {
+			return "";
+		}
+		return ns.replaceAll("[#/]+$", "");
+	}
+
+
 
 	private String appendDetails(final String detail, final String prefix, final boolean useFullStop) {
 		if (detail == null || detail.isEmpty()) {
@@ -1077,6 +1191,11 @@ public class Configuration {
 		return abstractPath;
 	}
 
+	public List<Ontology> getReusedVocabularies() {
+		return reusedVocabularies;
+	}
+
+
 	public String getDescriptionPath() {
 		return descriptionPath;
 	}
@@ -1460,5 +1579,9 @@ public class Configuration {
 
 	public void setIntroText(String introText) {
 		this.introText = introText;
+	}
+
+	private static boolean isBlank(String s) {
+		return s == null || s.trim().isEmpty();
 	}
 }
