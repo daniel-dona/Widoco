@@ -283,6 +283,7 @@ public class Constants {
 	public static final String PF_DESCRIPTION_PATH = "pathToDescription";
 	public static final String PF_OVERVIEW_PATH = "pathToOverview";
 	public static final String PF_REFERENCES_PATH = "pathToReferences";
+	public static final String PF_OMIT_README = "omitReadme";
 	public static final String PF_REFERENCES_CODE_REPO = "codeRepository";
 
 	/*OWL_API RDF Serializations*/
@@ -419,6 +420,9 @@ public class Constants {
                 + "        This flag can only be used with the htaccess option.\n" +
 "    -excludeIntroduction: Skip the introduction section in the documentation. \n" +
 "    -uniteSections: Write all HTML sections into a single HTML document. \n" +
+"    -omitReadme: Do not generate the generic readme.md in the output folder. \n" +
+"    Per-language sections (config file): abstract-<lang>, description-<lang>, references-<lang>, pathToAbstract-<lang>, \n" +
+"        pathToDescription-<lang>, pathToReferences-<lang> override the language-agnostic content for each language. \n" +
 "    -noPlaceHolderText: Do not add any placeholder text (this will remove intro, abstract (if empty) and " +
 				"description sections)." +
 "    --help: Shows this message and exit.\n";
@@ -460,17 +464,33 @@ public class Constants {
 	public static String getIntroductionSectionTitleAndPlaceHolder(Configuration c, Properties lang) {
 		String s = "<h2 id=\"intro\" class=\"list\">";
 		//check if the content of the intro was found in a metadata property
-		if (c.getIntroText() == null || c.getIntroText().isEmpty()){
+		String introText = c.getIntroText();
+		if (introText == null || introText.isEmpty()){
 			s+= lang.getProperty(LANG_INTRO_PLACEHOLDER);
 		}else{
 			s+= lang.getProperty(LANG_INTRO_TITLE);
-			s+= "<span class=\"markdown\">"+ c.getIntroText() + "</span>\n";
+			s+= "<span class=\"markdown\">"+ introText + "</span>\n";
 		}
 
 		return s;
 	}
 
 	public static String getReferencesSection(Configuration c, Properties lang) {
+		return getReferencesSection("", c, lang);
+	}
+
+	public static String getReferencesSection(String referencesContent, Configuration c, Properties lang) {
+		// EDINT extension: optional references content, per language. The content is
+		// written verbatim after the title line (it carries its own markup).
+		if (referencesContent != null && !referencesContent.isEmpty()) {
+			String fullPlaceholder = lang.getProperty(LANG_REFERENCES_PLACEHOLDER, "References");
+			String titleLine = fullPlaceholder;
+			int closeIdx = fullPlaceholder.indexOf("</h2>");
+			if (closeIdx >= 0) {
+				titleLine = fullPlaceholder.substring(0, closeIdx + "</h2>".length());
+			}
+			return "<h2 id=\"ref\" class=\"list\">" + titleLine + "\n" + referencesContent;
+		}
 		String s = "\n<h2 id=\"ref\" class=\"list\">" + lang.getProperty(LANG_REFERENCES_PLACEHOLDER)
 				+ "\n";
 		return s;
@@ -795,8 +815,8 @@ public class Constants {
 				+ "      function _ls(sel,url){var d=$.Deferred();$(sel).load(url,function(){d.resolve();});return d.promise();}\n";
 		// collect all section loads; call loadHash only after all complete
 		if (c.isIncludeAbstract()) {
-			if(c.getAbstractPath()!=null && !c.getAbstractPath().isEmpty()){
-				document += "      loads.push(_ls(\"#abstract\",\""+c.getAbstractPath()+"\")); \n";
+		if(c.getAbstractPath(c.getCurrentLanguage())!=null && !c.getAbstractPath(c.getCurrentLanguage()).isEmpty()){
+				document += "      loads.push(_ls(\"#abstract\",\""+c.getAbstractPath(c.getCurrentLanguage())+"\")); \n";
 			}else {
 				document += "      loads.push(_ls(\"#abstract\",\"sections/abstract-" + c.getCurrentLanguage() + ".html\")); \n";
 			}
@@ -828,8 +848,8 @@ public class Constants {
 			}
 		}
 		if (c.isIncludeReferences()){
-			if(c.getReferencesPath()!=null && !c.getReferencesPath().isEmpty()){
-				document += "      loads.push(_ls(\"#references\",\""+c.getReferencesPath()+"\")); \n";
+			if(c.getReferencesPath(c.getCurrentLanguage())!=null && !c.getReferencesPath(c.getCurrentLanguage()).isEmpty()){
+				document += "      loads.push(_ls(\"#references\",\""+c.getReferencesPath(c.getCurrentLanguage())+"\")); \n";
 			}else {
 				document += "      loads.push(_ls(\"#references\",\"sections/references-" + c.getCurrentLanguage()
 						+ ".html\")); \n";
@@ -1137,10 +1157,32 @@ public class Constants {
 	}
 
 	public static String getDescriptionSectionTitleAndPlaceHolder(Configuration c, Properties lang) {
+		return getDescriptionSectionTitleAndPlaceHolder(c, lang, c.getMainOntology().getDescription());
+	}
+
+	public static String getDescriptionSectionTitleAndPlaceHolder(Configuration c, Properties lang, String ontologyDescription) {
+		return getDescriptionSectionTitleAndPlaceHolder(c, lang, ontologyDescription, false);
+	}
+
+	/**
+	 * EDINT extension: when {@code verbatim} is true the content is written as-is
+	 * right after the section title line (it is expected to carry its own HTML
+	 * markup, e.g. multiple markdown spans), instead of being wrapped into a
+	 * single <span class="markdown"> element.
+	 */
+	public static String getDescriptionSectionTitleAndPlaceHolder(Configuration c, Properties lang, String ontologyDescription, boolean verbatim) {
 		StringBuilder descriptionString = new StringBuilder(
 				"<h2 id=\"desc\" class=\"list\">" + c.getMainOntology().getName() + ": ");
-		descriptionString.append(lang.getProperty(LANG_DESCRIPTION_TITLE)).append("\n");
-		String ontologyDescription = c.getMainOntology().getDescription();
+		descriptionString.append(lang.getProperty(LANG_DESCRIPTION_TITLE));
+		if (verbatim) {
+			if (ontologyDescription != null && !ontologyDescription.isEmpty()) {
+				descriptionString.append(ontologyDescription);
+				if (!ontologyDescription.endsWith("\n")) {
+					descriptionString.append("\n");
+				}
+			}
+			return descriptionString.toString();
+		}
 		//add description body from ontology or default
 		descriptionString.append("<span class=\"markdown\">");
 		if (ontologyDescription != null && !ontologyDescription.isEmpty()){

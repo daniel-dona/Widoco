@@ -108,7 +108,7 @@ public final class GuiController {
 				includeImportedOntologies = false, htAccess = false, webVowl = false, errors = false, licensius = false,
 				generateOnlyCrossRef = false, includeNamedIndividuals = true, includeAnnotationProperties = false,
 				displaySerializations = true, displayDirectImportsOnly = false, excludeIntroduction = false, excludeProvenance = false,
-			    uniteSections = false, placeHolderText = true, localImports=false;
+			    uniteSections = false, placeHolderText = true, localImports=false, omitReadme=false;
 		String confPath = "";
 		String code = null;// for tracking analytics.
 		String[] languages = null;
@@ -203,6 +203,9 @@ public final class GuiController {
 			case "-noPlaceHolderText":
 				placeHolderText = false;
 				break;
+			case "-omitReadme":
+				omitReadme = true;
+				break;
 			case "-excludeProvenance":
 				excludeProvenance = true;
 				break;
@@ -281,6 +284,9 @@ public final class GuiController {
 		}
 		if (rb != null) {
 			this.config.setRewriteBase(rb);
+		}
+		if (omitReadme) {
+			config.setOmitReadme(true);
 		}
 		if (languages != null) {
 			config.removeLanguageToGenerate("en");// default
