@@ -24,6 +24,8 @@ import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
 
 import org.semanticweb.owlapi.model.*;
@@ -79,6 +81,15 @@ public class Configuration {
 	private String overviewPath;
 	private String descriptionPath;
 	private String referencesPath;
+	// EDINT extension: per-language section content and paths (keys like "abstract-en", "pathToDescription-es")
+	private final Map<String, String> abstractSectionByLang = new HashMap<>();
+	private final Map<String, String> descriptionSectionByLang = new HashMap<>();
+	private final Map<String, String> referencesSectionByLang = new HashMap<>();
+	private final Map<String, String> abstractPathByLang = new HashMap<>();
+	private final Map<String, String> descriptionPathByLang = new HashMap<>();
+	private final Map<String, String> referencesPathByLang = new HashMap<>();
+	// EDINT extension: extra files/dirs to copy into the output resources folder
+	private final List<String> extraResources = new ArrayList<>();
 	private String googleAnalyticsCode = null;
 	private String contextURI; // not added with an ontology because it's independent
 
@@ -412,6 +423,11 @@ public class Configuration {
 			this.setIntroductionPath(propertyFile.getProperty(Constants.PF_INTRO_PATH, null));
 			this.setOverviewPath(propertyFile.getProperty(Constants.PF_OVERVIEW_PATH, null));
 			this.setReferencesPath(propertyFile.getProperty(Constants.PF_REFERENCES_PATH, null));
+			loadPerLanguageSectionProperties();
+		String er = propertyFile.getProperty(Constants.PF_EXTRA_RESOURCES, "");
+		if (!er.isEmpty()) {
+			extraResources.addAll(Arrays.asList(er.split(";")));
+		}
 			mainOntologyMetadata.setCodeRepository(propertyFile.getProperty(Constants.PF_REFERENCES_CODE_REPO, ""));
 		} catch (IOException ex) {
 			// Only a warning, as we can continue safely without a property file.
@@ -535,6 +551,8 @@ public class Configuration {
 			}
 		}
 	}
+
+
 
 	private String appendDetails(final String detail, final String prefix, final boolean useFullStop) {
 		if (detail == null || detail.isEmpty()) {
@@ -1075,6 +1093,105 @@ public class Configuration {
 
 	public String getAbstractPath() {
 		return abstractPath;
+	}
+
+	/**
+	 * EDINT extension: resolves a per-language property with fallback to the
+	 * language-agnostic value.
+	 */
+	private String resolveByLang(Map<String, String> byLang, String lang, String fallback) {
+		if (lang != null && byLang.containsKey(lang)) {
+			return byLang.get(lang);
+		}
+		return fallback;
+	}
+
+	public String getAbstractSection(String lang) {
+		return resolveByLang(abstractSectionByLang, lang, abstractSection);
+	}
+
+	public String getDescription(String lang) {
+		return resolveByLang(descriptionSectionByLang, lang, mainOntologyMetadata.getDescription());
+	}
+
+	public String getReferences(String lang) {
+		return resolveByLang(referencesSectionByLang, lang, "");
+	}
+
+	public String getAbstractPath(String lang) {
+		return resolveByLang(abstractPathByLang, lang, abstractPath);
+	}
+
+	public String getDescriptionPath(String lang) {
+		return resolveByLang(descriptionPathByLang, lang, descriptionPath);
+	}
+
+	public String getReferencesPath(String lang) {
+		return resolveByLang(referencesPathByLang, lang, referencesPath);
+	}
+
+
+	public Map<String, String> getPerLanguageAbstractSections() {
+		return abstractSectionByLang;
+	}
+
+	public Map<String, String> getPerLanguageDescriptions() {
+		return descriptionSectionByLang;
+	}
+
+	public boolean hasPerLanguageDescription(String lang) {
+		return lang != null && descriptionSectionByLang.containsKey(lang);
+	}
+
+	public Map<String, String> getPerLanguageReferences() {
+		return referencesSectionByLang;
+	}
+
+
+	public List<String> getExtraResources() {
+		return extraResources;
+	}
+
+
+
+	/**
+	 * EDINT extension: loads per-language section content and paths from keys
+	 * with a language suffix, e.g. "abstract-en", "description-es",
+	 * "references-en", "pathToAbstract-en", "pathToDescription-es",
+	 * "pathToReferences-en".
+	 */
+	private void loadPerLanguageSectionProperties() {
+		Pattern langKey = Pattern
+				.compile("^(abstract|description|references|pathToAbstract|pathToDescription|pathToReferences)-([A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?)$");
+		for (String key : propertyFile.stringPropertyNames()) {
+			Matcher m = langKey.matcher(key);
+			if (!m.matches()) {
+				continue;
+			}
+			String value = propertyFile.getProperty(key, "");
+			String lang = m.group(2);
+			switch (m.group(1)) {
+				case "abstract":
+					abstractSectionByLang.put(lang, value);
+					includeAbstract = true;
+					break;
+				case "description":
+					descriptionSectionByLang.put(lang, value);
+					break;
+				case "references":
+					referencesSectionByLang.put(lang, value);
+					break;
+				case "pathToAbstract":
+					abstractPathByLang.put(lang, value);
+					break;
+				case "pathToDescription":
+					descriptionPathByLang.put(lang, value);
+					break;
+				case "pathToReferences":
+					referencesPathByLang.put(lang, value);
+					break;
+			}
+		}
 	}
 
 	public String getDescriptionPath() {
