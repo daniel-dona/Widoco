@@ -100,6 +100,8 @@ public class Configuration {
 	private final List<String> kosHTML = new ArrayList<>();
 	// EDINT extension: vocabularies reused without owl:imports (detected from the model)
 	private final List<Ontology> reusedVocabularies = new ArrayList<>();
+	// EDINT extension: raw widoco:* annotation values with vocabulary labels
+	private final Map<String, String> widocoAnnotationValues = new HashMap<>();
 	private String googleAnalyticsCode = null;
 	private String contextURI; // not added with an ontology because it's independent
 
@@ -524,6 +526,8 @@ public class Configuration {
 		// process ontology annotations
 		o.annotations().forEach(a -> completeOntologyMetadata(a,o));
 
+		// EDINT extension: labels for imports/extensions from widoco annotations
+		applyVocabularyLabels();
 		// EDINT extension: detect vocabularies reused without owl:imports
 		detectReusedVocabularies(o);
 		// EDINT extension: restore conf values for fields the ontology does not
@@ -611,6 +615,127 @@ public class Configuration {
 	 * precedence; the conf only fills the gaps (e.g. latestVersionURI, publisher,
 	 * status, citation, dates).
 	 */
+	/** Labels for well-known vocabularies, from the shipped resource. */
+	private static Map<String, String> shippedVocabularyLabels;
+
+	private static Map<String, String> shippedVocabularyLabels() {
+		if (shippedVocabularyLabels == null) {
+			shippedVocabularyLabels = new HashMap<>();
+			// manual parsing: IRIs contain ':' which java.util.Properties would treat
+			// as a key/value separator
+			try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(
+					Configuration.class.getResourceAsStream(Constants.VOCABULARY_LABELS_RESOURCE), "UTF-8"))) {
+				String line;
+				while ((line = reader.readLine()) != null) {
+					line = line.trim();
+					if (line.isEmpty() || line.startsWith("#")) {
+						continue;
+					}
+					int eq = line.indexOf('=');
+					if (eq > 0) {
+						shippedVocabularyLabels.put(normalizeNs(line.substring(0, eq)),
+								line.substring(eq + 1).trim());
+					}
+				}
+			} catch (Exception e) {
+				System.err.println("Could not read vocabulary labels resource: " + e.getMessage());
+			}
+		}
+		return shippedVocabularyLabels;
+	}
+
+	/**
+	 * EDINT extension: labels provided through widoco:* annotations in the
+	 * ontology (pairs of names/URIs separated by ';'), for imports, extensions and
+	 * reused vocabularies.
+	 */
+	private Map<String, String> annotationLabels(String namesProp, String urisProp, String keySuffix) {
+		Map<String, String> labels = new HashMap<>();
+		String names = widocoAnnotationValues.get(namesProp);
+		String uris = widocoAnnotationValues.get(urisProp);
+		if (names == null || uris == null) {
+			return labels;
+		}
+		String[] n = names.split(";");
+		String[] u = uris.split(";");
+		for (int i = 0; i < n.length && i < u.length; i++) {
+			if (!n[i].trim().isEmpty() && !u[i].trim().isEmpty()) {
+				labels.put(normalizeNs(u[i].trim()), n[i].trim());
+			}
+		}
+		return labels;
+	}
+
+	/**
+	 * EDINT extension: resolves the display label of a vocabulary: label provided
+	 * in the ontology annotations, then shipped dictionary, then the last full
+	 * segment of the IRI. Returns null when nothing better than the IRI is found.
+	 */
+	private String vocabularyLabel(String iri, Map<String, String> annotationLabels) {
+		String ns = normalizeNs(iri);
+		if (annotationLabels.containsKey(ns)) {
+			return annotationLabels.get(ns);
+		}
+		if (shippedVocabularyLabels().containsKey(ns)) {
+			return shippedVocabularyLabels().get(ns);
+		}
+		return null;
+	}
+
+	/** Last full segment of an IRI, prettified ("direccion-postal" -> "Direccion Postal"). */
+	private static String lastSegmentLabel(String iri) {
+		String base = iri.replaceAll("[#/]+$", "");
+		String seg = base.substring(base.lastIndexOf('/') + 1);
+		if (seg.isEmpty()) {
+			return iri;
+		}
+		String pretty = seg.replace('-', ' ').replace('_', ' ').trim();
+		if (pretty.length() > 1) {
+			pretty = Character.toUpperCase(pretty.charAt(0)) + pretty.substring(1);
+		}
+		return pretty;
+	}
+
+	/** Relabels imports and extensions from annotations and disambiguates duplicates. */
+	private void applyVocabularyLabels() {
+		Map<String, String> impLabels = annotationLabels(Constants.PROP_WIDOCO_IMPORTED_NAMES,
+				Constants.PROP_WIDOCO_IMPORTED_URIS, "imported");
+		Map<String, String> extLabels = annotationLabels(Constants.PROP_WIDOCO_EXTENDED_NAMES,
+				Constants.PROP_WIDOCO_EXTENDED_URIS, "extended");
+		relabel(mainOntologyMetadata.getImportedOntologies(), impLabels);
+		relabel(mainOntologyMetadata.getExtendedOntologies(), extLabels);
+	}
+
+	private void relabel(List<Ontology> ontos, Map<String, String> annotationLabels) {
+		for (Ontology o : ontos) {
+			String iri = o.getNamespaceURI();
+			if (iri == null || iri.isEmpty()) {
+				continue;
+			}
+			String label = vocabularyLabel(iri, annotationLabels);
+			if (label == null) {
+				label = lastSegmentLabel(iri);
+			}
+			o.setName(label);
+		}
+		disambiguate(ontos);
+	}
+
+	/** Adds a hint (last two segments of the host/path) when labels collide. */
+	private static void disambiguate(List<Ontology> ontos) {
+		Map<String, Integer> counts = new HashMap<>();
+		for (Ontology o : ontos) {
+			counts.merge(o.getName(), 1, Integer::sum);
+		}
+		for (Ontology o : ontos) {
+			if (counts.getOrDefault(o.getName(), 0) > 1) {
+				String iri = o.getNamespaceURI() == null ? "" : o.getNamespaceURI();
+				String host = iri.replaceFirst("^[a-zA-Z]+://", "").replaceFirst("[/#].*$", "");
+				o.setName(o.getName() + " (" + host + ")");
+			}
+		}
+	}
+
 	/**
 	 * EDINT extension: detect vocabularies reused without owl:imports. Collects
 	 * the namespaces of external entities referenced from subClassOf,
@@ -687,20 +812,16 @@ public class Configuration {
 			ont.setNamespaceURI(e.getKey());
 			String label = confLabels.getOrDefault(e.getKey(), null);
 			if (isBlank(label)) {
-				String base = e.getKey().replaceAll("[#/]+$", "");
-				String[] segs = base.substring(base.lastIndexOf('/') + 1).split("-");
-				label = segs[segs.length - 1];
-				// version-only or generic last segment: use the last two segments
-				if (label.matches("(\\d+(\\.\\d+)*)|core|main") && segs.length >= 2) {
-					label = segs[segs.length - 2] + " " + label;
-				}
-				if (isBlank(label)) {
-					label = e.getKey();
-				}
+				label = vocabularyLabel(e.getKey(), annotationLabels(Constants.PROP_WIDOCO_REUSED_NAMES,
+						Constants.PROP_WIDOCO_REUSED_URIS, "reused"));
+			}
+			if (isBlank(label)) {
+				label = lastSegmentLabel(e.getKey());
 			}
 			ont.setName(label);
 			reusedVocabularies.add(ont);
 		}
+		disambiguate(reusedVocabularies);
 		reusedVocabularies.sort(Comparator.comparing(Ontology::getName));
 	}
 
@@ -1038,6 +1159,15 @@ public class Configuration {
 		case Constants.PROP_FOAF_LOGO:
 			value = WidocoUtils.getValueAsLiteralOrURI(a.getValue());
 			mainOntologyMetadata.setLogo(value);
+			break;
+		case Constants.PROP_WIDOCO_IMPORTED_NAMES:
+		case Constants.PROP_WIDOCO_IMPORTED_URIS:
+		case Constants.PROP_WIDOCO_EXTENDED_NAMES:
+		case Constants.PROP_WIDOCO_EXTENDED_URIS:
+		case Constants.PROP_WIDOCO_REUSED_NAMES:
+		case Constants.PROP_WIDOCO_REUSED_URIS:
+			value = WidocoUtils.getValueAsLiteralOrURI(a.getValue());
+			widocoAnnotationValues.put(propertyName, value);
 			break;
 		case Constants.PROP_VOAF_EXTENDS:
 			value = WidocoUtils.getValueAsLiteralOrURI(a.getValue());
