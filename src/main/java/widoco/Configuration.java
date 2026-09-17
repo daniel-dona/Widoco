@@ -372,7 +372,8 @@ public class Configuration {
 			if (!"".equals(serializationTTL)) {
 				mainOntologyMetadata.addSerialization(Constants.TTL, serializationTTL);
 			}
-			String serializationNT = propertyFile.getProperty(Constants.PF_SERIALIZATION_NT, "");
+			String serializationNT = propertyFile.getProperty(Constants.PF_SERIALIZATION_NT,
+					propertyFile.getProperty(Constants.PF_SERIALIZATION_N3, ""));
 			if (!"".equals(serializationNT)) {
 				mainOntologyMetadata.addSerialization(Constants.NT, serializationNT);
 			}
@@ -430,7 +431,27 @@ public class Configuration {
 		if (o == null) {
 			return;
 		}
+		// EDINT extension: keep the serialization file names read from the conf,
+		// because initializeOntology() resets them to the defaults. Ontology
+		// annotations applied further down still take precedence.
+		Map<String, String> confSerializations = new HashMap<>();
+		for (String[] pair : new String[][] {
+				{ Constants.RDF_XML, Constants.PF_SERIALIZATION_RDF },
+				{ Constants.TTL, Constants.PF_SERIALIZATION_TTL },
+				{ Constants.NT, Constants.PF_SERIALIZATION_NT },
+				{ Constants.JSON_LD, Constants.PF_SERIALIZATION_JSON } }) {
+			String v = propertyFile.getProperty(pair[1], "");
+			if (isBlank(v) && Constants.NT.equals(pair[0])) {
+				v = propertyFile.getProperty(Constants.PF_SERIALIZATION_N3, "");
+			}
+			if (!isBlank(v)) {
+				confSerializations.put(pair[0], v);
+			}
+		}
 		initializeOntology();
+		for (Map.Entry<String, String> e : confSerializations.entrySet()) {
+			mainOntologyMetadata.getSerializations().put(e.getKey(), e.getValue());
+		}
 		this.mainOntologyMetadata.setNamespacePrefix("[Ontology NS Prefix]");
 		String uri;
 		try {
@@ -535,6 +556,8 @@ public class Configuration {
 			}
 		}
 	}
+
+
 
 	private String appendDetails(final String detail, final String prefix, final boolean useFullStop) {
 		if (detail == null || detail.isEmpty()) {
@@ -1460,5 +1483,9 @@ public class Configuration {
 
 	public void setIntroText(String introText) {
 		this.introText = introText;
+	}
+
+	private static boolean isBlank(String s) {
+		return s == null || s.trim().isEmpty();
 	}
 }
