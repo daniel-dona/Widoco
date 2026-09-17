@@ -219,8 +219,6 @@ public class Constants {
 	public static final String PROP_WIDOCO_EXTENDED_URIS = NS_WIDOCO + "extendedOntologyURIs";
 	public static final String PROP_WIDOCO_REUSED_NAMES = NS_WIDOCO + "reusedVocabularyNames";
 	public static final String PROP_WIDOCO_REUSED_URIS = NS_WIDOCO + "reusedVocabularyURIs";
-	// EDINT extension: labels for well-known vocabularies
-	public static final String VOCABULARY_LABELS_RESOURCE = "/config/vocabulary-labels.properties";
 	public static final String PROP_WIDOCO_INTRODUCTION = NS_WIDOCO + "introduction";
 	public static final String PROP_WIDOCO_RDF_XML= NS_WIDOCO + "rdfxmlSerialization";
 	public static final String PROP_WIDOCO_NT= NS_WIDOCO + "ntSerialization";

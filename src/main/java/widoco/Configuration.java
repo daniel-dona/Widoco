@@ -615,35 +615,6 @@ public class Configuration {
 	 * precedence; the conf only fills the gaps (e.g. latestVersionURI, publisher,
 	 * status, citation, dates).
 	 */
-	/** Labels for well-known vocabularies, from the shipped resource. */
-	private static Map<String, String> shippedVocabularyLabels;
-
-	private static Map<String, String> shippedVocabularyLabels() {
-		if (shippedVocabularyLabels == null) {
-			shippedVocabularyLabels = new HashMap<>();
-			// manual parsing: IRIs contain ':' which java.util.Properties would treat
-			// as a key/value separator
-			try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(
-					Configuration.class.getResourceAsStream(Constants.VOCABULARY_LABELS_RESOURCE), "UTF-8"))) {
-				String line;
-				while ((line = reader.readLine()) != null) {
-					line = line.trim();
-					if (line.isEmpty() || line.startsWith("#")) {
-						continue;
-					}
-					int eq = line.indexOf('=');
-					if (eq > 0) {
-						shippedVocabularyLabels.put(normalizeNs(line.substring(0, eq)),
-								line.substring(eq + 1).trim());
-					}
-				}
-			} catch (Exception e) {
-				System.err.println("Could not read vocabulary labels resource: " + e.getMessage());
-			}
-		}
-		return shippedVocabularyLabels;
-	}
-
 	/**
 	 * EDINT extension: labels provided through widoco:* annotations in the
 	 * ontology (pairs of names/URIs separated by ';'), for imports, extensions and
@@ -667,17 +638,14 @@ public class Configuration {
 	}
 
 	/**
-	 * EDINT extension: resolves the display label of a vocabulary: label provided
-	 * in the ontology annotations, then shipped dictionary, then the last full
-	 * segment of the IRI. Returns null when nothing better than the IRI is found.
+	 * EDINT extension: resolves the display label of a vocabulary from the labels
+	 * declared in the ontology (widoco:* annotations). Returns null when the
+	 * ontology does not declare one, so callers fall back to the IRI segment.
 	 */
 	private String vocabularyLabel(String iri, Map<String, String> annotationLabels) {
 		String ns = normalizeNs(iri);
 		if (annotationLabels.containsKey(ns)) {
 			return annotationLabels.get(ns);
-		}
-		if (shippedVocabularyLabels().containsKey(ns)) {
-			return shippedVocabularyLabels().get(ns);
 		}
 		return null;
 	}
