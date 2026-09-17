@@ -102,6 +102,8 @@ public class Configuration {
 	private final List<Ontology> reusedVocabularies = new ArrayList<>();
 	// EDINT extension: raw widoco:* annotation values with vocabulary labels
 	private final Map<String, String> widocoAnnotationValues = new HashMap<>();
+	// EDINT extension: widoco:vocabularyLabel entries (namespace -> lang -> label)
+	private final Map<String, Map<String, String>> vocabularyLabels = new HashMap<>();
 	private String googleAnalyticsCode = null;
 	private String contextURI; // not added with an ontology because it's independent
 
@@ -644,6 +646,17 @@ public class Configuration {
 	 */
 	private String vocabularyLabel(String iri, Map<String, String> annotationLabels) {
 		String ns = normalizeNs(iri);
+		Map<String, String> byLang = vocabularyLabels.get(ns);
+		if (byLang != null && !byLang.isEmpty()) {
+			String lang = currentLanguage == null ? "" : currentLanguage;
+			if (byLang.containsKey(lang)) {
+				return byLang.get(lang);
+			}
+			if (byLang.containsKey("")) {
+				return byLang.get("");
+			}
+			return byLang.values().iterator().next();
+		}
 		if (annotationLabels.containsKey(ns)) {
 			return annotationLabels.get(ns);
 		}
@@ -1127,6 +1140,35 @@ public class Configuration {
 		case Constants.PROP_FOAF_LOGO:
 			value = WidocoUtils.getValueAsLiteralOrURI(a.getValue());
 			mainOntologyMetadata.setLogo(value);
+			break;
+		case Constants.PROP_WIDOCO_VOCABULARY_LABEL:
+			try {
+				if (a.getValue() instanceof OWLAnonymousIndividual) {
+					OWLAnonymousIndividual node = (OWLAnonymousIndividual) a.getValue();
+					String iri = null;
+					Map<String, String> labelsByLang = new HashMap<>();
+					for (OWLAnnotationAssertionAxiom ax : o.annotationAssertionAxioms(node)
+							.collect(java.util.stream.Collectors.toSet())) {
+						String prop = ax.getProperty().getIRI().getIRIString();
+						String val = WidocoUtils.getValueAsLiteralOrURI(ax.getValue());
+						if (Constants.PROP_WIDOCO_VOCABULARY_IRI.equals(prop)) {
+							iri = val;
+						} else if (Constants.PROP_RDFS_LABEL.equals(prop)
+								|| Constants.PROP_DCTERMS_TITLE.equals(prop)) {
+							String lang = "";
+							if (ax.getValue().isLiteral()) {
+								lang = ax.getValue().asLiteral().get().getLang();
+							}
+							labelsByLang.put(lang == null ? "" : lang, val);
+						}
+					}
+					if (iri != null && !labelsByLang.isEmpty()) {
+						vocabularyLabels.put(normalizeNs(iri), labelsByLang);
+					}
+				}
+			} catch (Exception e) {
+				logger.error("Could not read widoco:vocabularyLabel annotation: " + e.getMessage());
+			}
 			break;
 		case Constants.PROP_WIDOCO_IMPORTED_NAMES:
 		case Constants.PROP_WIDOCO_IMPORTED_URIS:

@@ -219,6 +219,10 @@ public class Constants {
 	public static final String PROP_WIDOCO_EXTENDED_URIS = NS_WIDOCO + "extendedOntologyURIs";
 	public static final String PROP_WIDOCO_REUSED_NAMES = NS_WIDOCO + "reusedVocabularyNames";
 	public static final String PROP_WIDOCO_REUSED_URIS = NS_WIDOCO + "reusedVocabularyURIs";
+	// EDINT extension: structured vocabulary labels, one annotation per vocabulary:
+	// widoco:vocabularyLabel [ widoco:vocabularyIRI <iri> ; rdfs:label "..."@lang ]
+	public static final String PROP_WIDOCO_VOCABULARY_LABEL = NS_WIDOCO + "vocabularyLabel";
+	public static final String PROP_WIDOCO_VOCABULARY_IRI = NS_WIDOCO + "vocabularyIRI";
 	public static final String PROP_WIDOCO_INTRODUCTION = NS_WIDOCO + "introduction";
 	public static final String PROP_WIDOCO_RDF_XML= NS_WIDOCO + "rdfxmlSerialization";
 	public static final String PROP_WIDOCO_NT= NS_WIDOCO + "ntSerialization";
