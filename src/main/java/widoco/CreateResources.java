@@ -26,6 +26,7 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import javax.swing.JOptionPane;
 import lode.LODEGeneration;
@@ -509,6 +510,7 @@ public class CreateResources {
 
 	public static void saveConfigFile(String path, Configuration conf) throws IOException {
 		String textProperties = "\n";// the first line I leave an intro because there have been problems.
+
 		textProperties += Constants.PF_ABSTRACT_SECTION_CONTENT + "=" + conf.getAbstractSection() + "\n";
 		textProperties += Constants.PF_ONT_TITLE + "=" + conf.getMainOntology().getTitle() + "\n";
 		textProperties += Constants.PF_ONT_PREFIX + "=" + conf.getMainOntology().getNamespacePrefix() + "\n";
@@ -727,5 +729,6 @@ public class CreateResources {
 			}
 		}
 	}
+
 
 }
