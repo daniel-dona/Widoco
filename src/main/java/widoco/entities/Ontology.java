@@ -18,6 +18,8 @@ package widoco.entities;
 //import com.hp.hpl.jena.ontology.OntModel;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
 
@@ -26,6 +28,9 @@ import org.semanticweb.owlapi.model.OWLOntologyManager;
  * @author Daniel Garijo
  */
 public class Ontology {
+
+    /** Key used for the citation coming from the configuration file. */
+    public static final String CITE_AS_FROM_CONF = "@conf";
     /**
      * Name of the ontology
      */
@@ -115,7 +120,8 @@ public class Ontology {
     /**
      * How to cite the ontology (paper or publication that describes it)
      */
-    private String citeAs;
+    // EDINT extension: citation per language ("" = language-agnostic value)
+    private final Map<String, String> citeAsByLang = new LinkedHashMap<>();
     /**
      * DOI of the ontology, if available
      */
@@ -241,12 +247,54 @@ public class Ontology {
         this.serializations = serializations;
     }
      
+    /**
+     * EDINT extension: citation for the requested language, falling back to the
+     * language-agnostic value and, if there is none, to any declared citation.
+     */
+    public String getCiteAs(String lang) {
+        if (lang != null && !lang.isEmpty()) {
+            String value = citeAsByLang.get(lang);
+            if (value != null && !value.isEmpty()) {
+                return value;
+            }
+        }
+        String global = citeAsByLang.get("");
+        if (global != null && !global.isEmpty()) {
+            return global;
+        }
+        String fromConf = citeAsByLang.get(CITE_AS_FROM_CONF);
+        if (fromConf != null && !fromConf.isEmpty()) {
+            return fromConf;
+        }
+        // no citation for the requested language: use any declared one
+        for (String value : citeAsByLang.values()) {
+            if (value != null && !value.isEmpty()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    public void setCiteAs(String lang, String citeAs) {
+        String key = lang == null ? "" : lang;
+        if (citeAs == null || citeAs.isEmpty()) {
+            citeAsByLang.remove(key);
+            return;
+        }
+        citeAsByLang.put(key, citeAs);
+    }
+
+    public Map<String, String> getCiteAsByLang() {
+        return citeAsByLang;
+    }
+
+    /** Language-agnostic citation (kept for compatibility). */
     public String getCiteAs() {
-        return citeAs;
+        return getCiteAs("");
     }
 
     public void setCiteAs(String citeAs) {
-        this.citeAs = citeAs;
+        setCiteAs("", citeAs);
     }
     
     public String getDoi() {

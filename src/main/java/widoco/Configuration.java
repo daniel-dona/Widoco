@@ -419,7 +419,8 @@ public class Configuration {
 			mainOntologyMetadata.getLicense().setUrl(propertyFile.getProperty(Constants.PF_LICENSE_URI, ""));
 			mainOntologyMetadata.getLicense().setIcon(propertyFile.getProperty(Constants.PF_LICENSE_ICON_URL, ""));
 			mainOntologyMetadata.setStatus(propertyFile.getProperty(Constants.STATUS, "Specification Draft"));
-			mainOntologyMetadata.setCiteAs(propertyFile.getProperty(Constants.PF_CITE_AS, ""));
+			mainOntologyMetadata.setCiteAs(Ontology.CITE_AS_FROM_CONF,
+					propertyFile.getProperty(Constants.PF_CITE_AS, ""));
 			mainOntologyMetadata.setDoi(propertyFile.getProperty(Constants.PF_DOI, ""));
 			mainOntologyMetadata.setDescription(propertyFile.getProperty(Constants.PF_DESCRIPTION, ""));
 			mainOntologyMetadata.setLogo(propertyFile.getProperty(Constants.PF_LOGO, ""));
@@ -928,7 +929,8 @@ public class Configuration {
 			mainOntologyMetadata.setPreviousVersion(propertyFile.getProperty(Constants.PF_PREVIOUS_VERSION, ""));
 		}
 		if (isBlank(mainOntologyMetadata.getCiteAs())) {
-			mainOntologyMetadata.setCiteAs(propertyFile.getProperty(Constants.PF_CITE_AS, ""));
+			mainOntologyMetadata.setCiteAs(Ontology.CITE_AS_FROM_CONF,
+					propertyFile.getProperty(Constants.PF_CITE_AS, ""));
 		}
 		if (isBlank(mainOntologyMetadata.getStatus())) {
 			mainOntologyMetadata.setStatus(propertyFile.getProperty(Constants.STATUS, ""));
@@ -1197,7 +1199,9 @@ public class Configuration {
 		case Constants.PROP_SCHEMA_CITATION_HTTP:
 		case Constants.PROP_SCHEMA_CITATION_HTTPS:
 			value = WidocoUtils.getValueAsLiteralOrURI(a.getValue());
-			mainOntologyMetadata.setCiteAs(value);
+			// EDINT extension: keep the language of the citation
+			String citeLang = a.getValue().isLiteral() ? a.getValue().asLiteral().get().getLang() : "";
+			mainOntologyMetadata.setCiteAs(citeLang == null ? "" : citeLang, value);
 			break;
 		case Constants.PROP_BIBO_DOI:
 			value = WidocoUtils.getValueAsLiteralOrURI(a.getValue());
