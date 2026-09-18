@@ -654,7 +654,14 @@ public class Constants {
 	private static String getURLs(ArrayList<String> resources, String label) {
 		StringBuilder elem = new StringBuilder("<dt>" + label + "</dt>\n");
 		for (String e : resources) {
-			elem.append("<dd><a href=\"").append(e).append("\">").append(e).append("</a></dd>");
+			String value = e == null ? "" : e.trim();
+			// only link actual http(s) URIs: literal values (e.g. schema:funding)
+			// must not be rendered as a broken href
+			if (value.matches("(?i)^https?://\\S+$")) {
+				elem.append("<dd><a href=\"").append(value).append("\">").append(value).append("</a></dd>");
+			} else {
+				elem.append("<dd>").append(value).append("</dd>");
+			}
 		}
 		elem.append("\n");
 		return elem.toString() ;

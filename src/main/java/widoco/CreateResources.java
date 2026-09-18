@@ -750,7 +750,7 @@ public class CreateResources {
 			for (int i = 0; i < funders.size() - 1; i++) {
 				funder += funders.get(i).getName() + ";";
 			}
-			funder += funders.get(fund.size() - 1).getName() ; //name is a URL in this case
+			funder += funders.get(funders.size() - 1).getName() ; //name is a URL in this case
 		}
 		textProperties += Constants.PF_FUNDERS + "=" + funder + "\n";
 		// copy the result into the file
