@@ -479,10 +479,25 @@ public class Constants {
 				+ "padding:1em;border:1px solid #d0d0d0;border-radius:8px;"
 				+ "background:#fafafa;box-shadow:0 1px 4px rgba(0,0,0,0.08);\">"
 				+ "\n  <img src=\"" + diagramRef + "\" alt=\"" + caption
-				+ "\" style=\"max-width:100%;height:auto;\"/>"
+				+ "\" style=\"max-width:100%;height:auto;cursor:zoom-in;\""
+				+ " onclick=\"var z=document.getElementById('widoco-zoom');"
+				+ "z.style.display='flex';z.querySelector('img').src=this.src;\"/>"
 				+ "\n  <figcaption style=\"margin-top:0.75em;font-style:italic;"
 				+ "font-size:0.9em;color:#555;\">" + caption + "</figcaption>"
-				+ "\n</figure>\n";
+				+ "\n</figure>"
+				// lightbox: overlay a pantalla completa; clic o Esc cierra
+				+ "\n<div id=\"widoco-zoom\" style=\"display:none;position:fixed;inset:0;"
+				+ "background:rgba(0,0,0,0.88);z-index:99999;align-items:center;justify-content:center;"
+				+ "cursor:zoom-out;\" onclick=\"this.style.display='none'\">"
+				+ "\n  <img src=\"" + diagramRef + "\" alt=\"" + caption
+				+ "\" style=\"max-width:96vw;max-height:96vh;width:auto;height:auto;"
+				+ "border-radius:4px;background:#fff;padding:4px;\"/>"
+				+ "\n</div>"
+				+ "\n<script>"
+				+ "document.addEventListener('keydown',function(e){"
+				+ "if(e.key==='Escape'){var z=document.getElementById('widoco-zoom');"
+				+ "if(z){z.style.display='none';}}});"
+				+ "\n</script>\n";
 	}
 
 	public static String getAbstractSection(String abstractContent, Configuration c, Properties langFile) {
