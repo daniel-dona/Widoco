@@ -96,6 +96,10 @@ public class Configuration {
 	private final List<String> extraResources = new ArrayList<>();
 	// EDINT extension: skip copying the generic readme.md into the output folder
 	private boolean omitReadme = false;
+
+	// EDINT extension: static ontology diagram to embed in the description section
+	private String ontologyDiagram;
+	private final Map<String, String> diagramCaptionsByLang = new HashMap<>();
 	// EDINT extension: SKOS thesaurus HTML files (relative links for the index metadata)
 	private final List<String> kosHTML = new ArrayList<>();
 	// EDINT extension: vocabularies reused without owl:imports (detected from the model)
@@ -480,6 +484,7 @@ public class Configuration {
 			this.setReferencesPath(propertyFile.getProperty(Constants.PF_REFERENCES_PATH, null));
 			loadPerLanguageSectionProperties();
 			loadExtraResources();
+			loadDiagramProperties();
 			this.omitReadme = Boolean.parseBoolean(propertyFile.getProperty(Constants.PF_OMIT_README, "false"));
 			this.resolveVocabularyTitles = Boolean.parseBoolean(
 					propertyFile.getProperty(Constants.PF_RESOLVE_VOCAB_TITLES, "true"));
@@ -1684,6 +1689,45 @@ public class Configuration {
 					break;
 			}
 		}
+	}
+
+	/**
+	 * EDINT extension: reads the "diagram" property (path to an image file that
+	 * will be copied to images/ and embedded at the end of the description
+	 * section) and its per-language captions ("diagramCaption" or
+	 * "diagramCaption-<lang>", e.g. diagramCaption-es / diagramCaption-en).
+	 */
+	private void loadDiagramProperties() {
+		String d = propertyFile.getProperty("diagram", "");
+		ontologyDiagram = d.trim().isEmpty() ? null : d.trim();
+		diagramCaptionsByLang.clear();
+		for (String key : propertyFile.stringPropertyNames()) {
+			if (key.equals("diagramCaption") || key.startsWith("diagramCaption-")) {
+				String lang = key.equals("diagramCaption") ? "" : key.substring("diagramCaption-".length());
+				String value = propertyFile.getProperty(key, "").trim();
+				if (!value.isEmpty()) {
+					diagramCaptionsByLang.put(lang, value);
+				}
+			}
+		}
+	}
+
+	/** EDINT extension: configured diagram path, or null if none. */
+	public String getOntologyDiagram() {
+		return ontologyDiagram;
+	}
+
+	/** EDINT extension: caption for the diagram in the given language
+	 * (falls back to the language-agnostic caption, then to a generic one). */
+	public String getDiagramCaption(String lang) {
+		if (lang != null && diagramCaptionsByLang.containsKey(lang)) {
+			return diagramCaptionsByLang.get(lang);
+		}
+		if (diagramCaptionsByLang.containsKey("")) {
+			return diagramCaptionsByLang.get("");
+		}
+		return "es".equals(lang) ? "Figura 1. Diagrama de la ontología."
+				: "Figure 1. Ontology diagram.";
 	}
 
 	/**

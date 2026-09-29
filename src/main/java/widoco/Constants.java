@@ -444,7 +444,8 @@ public class Constants {
 "    -omitReadme: Do not generate the generic readme.md in the output folder. \n" +
 "    extraCSS / extraJS (config file): semicolon-separated list of CSS/JS resources to include in the head of the index. \n" +
 "    Per-language sections (config file): abstract-<lang>, description-<lang>, references-<lang>, pathToAbstract-<lang>, \n" +
-"        pathToDescription-<lang>, pathToReferences-<lang> override the language-agnostic content for each language. \n" +
+"        pathToDescription-<lang>, pathToReferences-<lang> override the language-agnostic content for each language. \n" +"    diagram (config file): path to an image (e.g. diagrams/diagram.png) that is copied to images/ and embedded at \n" +
+"        the end of the description section; captions via diagramCaption / diagramCaption-<lang>. \n" +
 "    -noPlaceHolderText: Do not add any placeholder text (this will remove intro, abstract (if empty) and " +
 				"description sections)." +
 "    --help: Shows this message and exit.\n";

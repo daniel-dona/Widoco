@@ -322,6 +322,25 @@ public class CreateResources {
                                     textToWrite, c);
                 }
             }
+            // EDINT extension: embed the configured ontology diagram at the end
+            // of the description section (image already copied to images/).
+            if (c.getOntologyDiagram() != null) {
+                String diagramSrcName = new File(c.getOntologyDiagram()).getName();
+                int dot = diagramSrcName.lastIndexOf('.');
+                String ext = (dot >= 0 && dot < diagramSrcName.length() - 1)
+                        ? diagramSrcName.substring(dot + 1).toLowerCase() : "png";
+                String caption = c.getDiagramCaption(c.getCurrentLanguage())
+                        .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        .replace("\"", "&quot;");
+                textToWrite += "\n<p style=\"text-align:center;\">"
+                        + "<img src=\"images/diagram." + ext + "\" alt=\"" + caption
+                        + "\" style=\"max-width:100%;\"/></p>"
+                        + "\n<p style=\"text-align:center;font-style:italic;\">" + caption + "</p>\n";
+                if (!c.isIncludeAllSectionsInOneDocument()) {
+                    saveDocument(path + File.separator + "description-" + c.getCurrentLanguage() + ".html",
+                                    textToWrite, c);
+                }
+            }
             return textToWrite;
 	}
 
@@ -488,6 +507,24 @@ public class CreateResources {
 				logger.warn("Extra resource not found (skipping): " + er);
 			}
 		}
+		// EDINT extension: copy the configured ontology diagram to images/
+		if (c.getOntologyDiagram() != null) {
+			File diagramSrc = new File(c.getOntologyDiagram());
+			if (diagramSrc.exists()) {
+				String name = diagramSrc.getName();
+				int dot = name.lastIndexOf('.');
+				String ext = (dot >= 0 && dot < name.length() - 1) ? name.substring(dot + 1).toLowerCase() : "png";
+				File imagesDir = new File(s + File.separator + "images");
+				if (!imagesDir.exists()) {
+					imagesDir.mkdirs();
+				}
+				java.nio.file.Files.copy(diagramSrc.toPath(),
+						new File(imagesDir.getAbsolutePath() + File.separator + "diagram." + ext).toPath(),
+						java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+			} else {
+				logger.warn("Diagram not found (skipping): " + c.getOntologyDiagram());
+			}
+		}
 		// copy jquery
 		WidocoUtils.copyLocalResource("/lode/jquery.js",
 				new File(resources.getAbsolutePath() + File.separator + "jquery.js"));
@@ -542,6 +579,9 @@ public class CreateResources {
 		String textProperties = "\n";// the first line I leave an intro because there have been problems.
 		textProperties += Constants.PF_ABSTRACT_SECTION_CONTENT + "=" + conf.getAbstractSection() + "\n";
 		// EDINT extension: persist per-language sections and extra resources
+		if (conf.getOntologyDiagram() != null) {
+			textProperties += "diagram=" + conf.getOntologyDiagram() + "\n";
+		}
 		for (Map.Entry<String, String> e : conf.getPerLanguageAbstractSections().entrySet())
 			textProperties += Constants.PF_ABSTRACT_SECTION_CONTENT + "-" + e.getKey() + "=" + e.getValue() + "\n";
 		for (Map.Entry<String, String> e : conf.getPerLanguageDescriptions().entrySet())
