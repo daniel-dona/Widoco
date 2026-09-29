@@ -83,6 +83,29 @@ public class CreateResources {
 		if (!c.getMainOntology().isHashOntology()) {
 			folderOut += File.separator + "doc";
 		}
+		// EDINT extension: fall back to the ontology's own metadata for the
+		// diagram (foaf:depiction / schema:image annotation on owl:Ontology).
+		// The config property "diagram" takes precedence over the annotation.
+		if (c.getOntologyDiagram() == null && c.getMainOntology() != null
+				&& c.getMainOntology().getOWLAPIModel() != null) {
+			String[] diagramProps = {
+					"http://xmlns.com/foaf/0.1/depiction",
+					"https://schema.org/image",
+					"http://schema.org/image" };
+			for (String prop : diagramProps) {
+				java.util.Optional<org.semanticweb.owlapi.model.OWLAnnotationValue> v = c.getMainOntology()
+						.getOWLAPIModel().annotations(
+								a -> prop.equals(a.getProperty().toStringID()))
+						.map(org.semanticweb.owlapi.model.OWLAnnotation::getValue)
+						.filter(av -> av instanceof org.semanticweb.owlapi.model.IRI)
+						.findFirst();
+				if (v.isPresent()) {
+					c.setOntologyDiagram(v.get().toString());
+					logger.info("Using ontology diagram from OWL annotation <" + prop + ">: " + v.get());
+					break;
+				}
+			}
+		}
 		createFolderStructure(folderOut, c, languageFile);
                 //the text of the sections is kept in case users choose to save in the same document
                 String abs="",intro="",overview="",description="",crossref="",ref="",changeLog="";
@@ -325,15 +348,21 @@ public class CreateResources {
             // EDINT extension: embed the configured ontology diagram at the end
             // of the description section (image already copied to images/).
             if (c.getOntologyDiagram() != null) {
-                String diagramSrcName = new File(c.getOntologyDiagram()).getName();
-                int dot = diagramSrcName.lastIndexOf('.');
-                String ext = (dot >= 0 && dot < diagramSrcName.length() - 1)
-                        ? diagramSrcName.substring(dot + 1).toLowerCase() : "png";
+                String diagramRef;
+                if (c.getOntologyDiagram().matches("(?i)https?://.*")) {
+                    diagramRef = c.getOntologyDiagram();
+                } else {
+                    String diagramSrcName = new File(c.getOntologyDiagram()).getName();
+                    int dot = diagramSrcName.lastIndexOf('.');
+                    String ext = (dot >= 0 && dot < diagramSrcName.length() - 1)
+                            ? diagramSrcName.substring(dot + 1).toLowerCase() : "png";
+                    diagramRef = "images/diagram." + ext;
+                }
                 String caption = c.getDiagramCaption(c.getCurrentLanguage())
                         .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                         .replace("\"", "&quot;");
                 textToWrite += "\n<p style=\"text-align:center;\">"
-                        + "<img src=\"images/diagram." + ext + "\" alt=\"" + caption
+                        + "<img src=\"" + diagramRef + "\" alt=\"" + caption
                         + "\" style=\"max-width:100%;\"/></p>"
                         + "\n<p style=\"text-align:center;font-style:italic;\">" + caption + "</p>\n";
                 if (!c.isIncludeAllSectionsInOneDocument()) {
@@ -508,7 +537,8 @@ public class CreateResources {
 			}
 		}
 		// EDINT extension: copy the configured ontology diagram to images/
-		if (c.getOntologyDiagram() != null) {
+		// (remote http(s) diagrams are referenced directly, not copied)
+		if (c.getOntologyDiagram() != null && !c.getOntologyDiagram().matches("(?i)https?://.*")) {
 			File diagramSrc = new File(c.getOntologyDiagram());
 			if (diagramSrc.exists()) {
 				String name = diagramSrc.getName();

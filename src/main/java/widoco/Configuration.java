@@ -1717,6 +1717,12 @@ public class Configuration {
 		return ontologyDiagram;
 	}
 
+	/** EDINT extension: sets the diagram path/URL (conf or OWL annotation). */
+	public void setOntologyDiagram(String ontologyDiagram) {
+		this.ontologyDiagram = (ontologyDiagram == null || ontologyDiagram.trim().isEmpty())
+				? null : ontologyDiagram.trim();
+	}
+
 	/** EDINT extension: caption for the diagram in the given language
 	 * (falls back to the language-agnostic caption, then to a generic one). */
 	public String getDiagramCaption(String lang) {
