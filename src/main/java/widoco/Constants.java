@@ -472,10 +472,17 @@ public class Constants {
 			String ext = (dot >= 0 && dot < name.length() - 1) ? name.substring(dot + 1).toLowerCase() : "png";
 			diagramRef = "images/diagram." + ext;
 		}
+		// presentación: tarjeta centrada, borde redondeado, fondo neutro
+		// (compatible con modo claro/oscuro) y pie semántico <figcaption>
 		return "<h2>" + langFile.getProperty(LANG_DIAGRAM) + "</h2>"
-				+ "\n<p style=\"text-align:center;\"><img src=\"" + diagramRef
-				+ "\" alt=\"" + caption + "\" style=\"max-width:100%;\"/></p>"
-				+ "\n<p style=\"text-align:center;font-style:italic;\">" + caption + "</p>\n";
+				+ "\n<figure style=\"margin:1.5em auto;max-width:90%;text-align:center;"
+				+ "padding:1em;border:1px solid #d0d0d0;border-radius:8px;"
+				+ "background:#fafafa;box-shadow:0 1px 4px rgba(0,0,0,0.08);\">"
+				+ "\n  <img src=\"" + diagramRef + "\" alt=\"" + caption
+				+ "\" style=\"max-width:100%;height:auto;\"/>"
+				+ "\n  <figcaption style=\"margin-top:0.75em;font-style:italic;"
+				+ "font-size:0.9em;color:#555;\">" + caption + "</figcaption>"
+				+ "\n</figure>\n";
 	}
 
 	public static String getAbstractSection(String abstractContent, Configuration c, Properties langFile) {
