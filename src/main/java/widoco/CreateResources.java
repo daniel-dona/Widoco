@@ -112,6 +112,18 @@ public class CreateResources {
 		if (c.isIncludeAbstract()) {
 			abs = createAbstractSection(folderOut + File.separator + "sections", c, languageFile);
 		}
+		// EDINT extension: the diagram gets its own section right after the abstract
+		String diagramSection = "";
+		if (c.getOntologyDiagram() != null) {
+			diagramSection = Constants.getDiagramSection(c, languageFile);
+			if (!c.isIncludeAllSectionsInOneDocument()) {
+				saveDocument(folderOut + File.separator + "sections" + File.separator + "diagram-"
+						+ c.getCurrentLanguage() + ".html", diagramSection, c);
+			} else {
+				// unified document: render right after the abstract text
+				abs += diagramSection;
+			}
+		}
 		if (c.isIncludeIntroduction()) {
 			intro = createIntroductionSection(folderOut + File.separator + "sections", c,
 					languageFile);
@@ -341,31 +353,6 @@ public class CreateResources {
                 textToWrite = Constants.getDescriptionSectionTitleAndPlaceHolder(c, lang,
                         c.getDescription(c.getCurrentLanguage()), c.hasPerLanguageDescription(c.getCurrentLanguage()));
                 if(!c.isIncludeAllSectionsInOneDocument()){
-                    saveDocument(path + File.separator + "description-" + c.getCurrentLanguage() + ".html",
-                                    textToWrite, c);
-                }
-            }
-            // EDINT extension: embed the configured ontology diagram at the end
-            // of the description section (image already copied to images/).
-            if (c.getOntologyDiagram() != null) {
-                String diagramRef;
-                if (c.getOntologyDiagram().matches("(?i)https?://.*")) {
-                    diagramRef = c.getOntologyDiagram();
-                } else {
-                    String diagramSrcName = new File(c.getOntologyDiagram()).getName();
-                    int dot = diagramSrcName.lastIndexOf('.');
-                    String ext = (dot >= 0 && dot < diagramSrcName.length() - 1)
-                            ? diagramSrcName.substring(dot + 1).toLowerCase() : "png";
-                    diagramRef = "images/diagram." + ext;
-                }
-                String caption = c.getDiagramCaption(c.getCurrentLanguage())
-                        .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                        .replace("\"", "&quot;");
-                textToWrite += "\n<p style=\"text-align:center;\">"
-                        + "<img src=\"" + diagramRef + "\" alt=\"" + caption
-                        + "\" style=\"max-width:100%;\"/></p>"
-                        + "\n<p style=\"text-align:center;font-style:italic;\">" + caption + "</p>\n";
-                if (!c.isIncludeAllSectionsInOneDocument()) {
                     saveDocument(path + File.separator + "description-" + c.getCurrentLanguage() + ".html",
                                     textToWrite, c);
                 }

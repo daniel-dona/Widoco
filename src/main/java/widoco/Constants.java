@@ -323,6 +323,7 @@ public class Constants {
 	// Constants for language tags. These are the names used in the property file
 	// This way, if refactoring is needed we only have to change it here.
 	public static final String LANG_ABSTRACT = "abstract";
+	public static final String LANG_DIAGRAM = "diagram";
 	public static final String LANG_ABSTRACT_PLACEHOLDER = "abstractPlaceHolder";
 	public static final String LANG_INTRO_TITLE = "introTitle";
 	public static final String LANG_INTRO_PLACEHOLDER = "introPlaceHolder";
@@ -456,6 +457,26 @@ public class Constants {
 	public static final String OPENING = "<!DOCTYPE html>\n<html>\n" + "<head>\n"
 			+ "<meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\" />\n";
 	// missing specialization. Missing alternate
+
+	/** EDINT extension: "Diagram" section shown right after the abstract. */
+	public static String getDiagramSection(Configuration c, Properties langFile) {
+		String caption = c.getDiagramCaption(c.getCurrentLanguage())
+				.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+				.replace("\"", "&quot;");
+		String diagramRef;
+		if (c.getOntologyDiagram().matches("(?i)https?://.*")) {
+			diagramRef = c.getOntologyDiagram();
+		} else {
+			String name = new java.io.File(c.getOntologyDiagram()).getName();
+			int dot = name.lastIndexOf('.');
+			String ext = (dot >= 0 && dot < name.length() - 1) ? name.substring(dot + 1).toLowerCase() : "png";
+			diagramRef = "images/diagram." + ext;
+		}
+		return "<h2>" + langFile.getProperty(LANG_DIAGRAM) + "</h2>"
+				+ "\n<p style=\"text-align:center;\"><img src=\"" + diagramRef
+				+ "\" alt=\"" + caption + "\" style=\"max-width:100%;\"/></p>"
+				+ "\n<p style=\"text-align:center;font-style:italic;\">" + caption + "</p>\n";
+	}
 
 	public static String getAbstractSection(String abstractContent, Configuration c, Properties langFile) {
 		String abstractSection = "<h2>" + langFile.getProperty(LANG_ABSTRACT)
@@ -855,6 +876,10 @@ public class Constants {
 				document += "      loads.push(_ls(\"#abstract\",\"sections/abstract-" + c.getCurrentLanguage() + ".html\")); \n";
 			}
 		}
+		if (c.getOntologyDiagram() != null) {
+			document += "      loads.push(_ls(\"#diagram\",\"sections/diagram-" + c.getCurrentLanguage()
+					+ ".html\")); \n";
+		}
 		if (c.isIncludeIntroduction()){
 			if(c.getIntroductionPath()!=null && !c.getIntroductionPath().isEmpty()){
 				document += "      loads.push(_ls(\"#introduction\",\""+c.getIntroductionPath()+"\")); \n";
@@ -909,6 +934,8 @@ public class Constants {
 		document += getStatus(c);
 		if (c.isIncludeAbstract())
 			document += "     <div id=\"abstract\"></div>\n";
+		if (c.getOntologyDiagram() != null)
+			document += "     <div id=\"diagram\"></div>\n";
 		document += "<div id=\"toc\"></div>";
 		if (c.isIncludeIntroduction()) {
 			document += "     <div id=\"introduction\"></div>\n";
