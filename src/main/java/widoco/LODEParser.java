@@ -229,7 +229,7 @@ public class LODEParser {
 						namedIndividuals = (nodeToString(html.item(i)));
 						namedIndividuals = namedIndividuals.replace(
 								"<h2>" + langFile.getProperty(Constants.LANG_NAMED_INDIV) + "</h2>",
-								"<h3 id=\"namedindividuals\" class=\"list\">"
+								"<h3 id=\"namedindividuals-headline\" class=\"list\">"
 										+ langFile.getProperty(Constants.LANG_NAMED_INDIV) + "</h3>");
 						namedIndividuals = extParser.parse(namedIndividuals);
 						break;

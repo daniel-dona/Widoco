@@ -749,7 +749,9 @@ public class Constants {
 	}
 
 	public static String getNameSpaceDeclaration(HashMap<String, String> namesp, Configuration c, Properties lang) {
-		String ns = "<div id=\"namespacedeclarations\">\n" + "<h3 id=\"ns\" class=\"list\">" + lang.getProperty(LANG_NS)
+		// the div in nsText keeps id="ns" (the caption and the TOC link to it), so the
+		// heading gets its own id instead of repeating it
+		String ns = "<div id=\"namespacedeclarations\">\n" + "<h3 id=\"ns-headline\" class=\"list\">" + lang.getProperty(LANG_NS)
 				+ lang.getProperty(LANG_NS_TEXT);
 		String nsPrefix = c.getMainOntology().getNamespacePrefix();
 		String nsURI = c.getMainOntology().getNamespaceURI();
