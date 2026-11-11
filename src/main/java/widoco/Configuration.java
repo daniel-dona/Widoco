@@ -1029,7 +1029,27 @@ public class Configuration {
 		return ns.replaceAll("[#/]+$", "");
 	}
 
+	/**
+	 * OWLAPI hands the ontology annotations over as an unordered set, so the order in
+	 * which creators, contributors and funders are collected changes from one run to
+	 * the next and the generated pages differ without any change in the data. RDF has
+	 * no declared order to preserve, so they are sorted by name: deterministic and
+	 * reproducible.
+	 */
+	private static void sortAgents(List<Agent> agents) {
+		if (agents == null || agents.size() < 2) {
+			return;
+		}
+		agents.sort(Comparator
+				.comparing((Agent a) -> a == null || a.getName() == null ? "" : a.getName(),
+						String.CASE_INSENSITIVE_ORDER)
+				.thenComparing(a -> a == null || a.getName() == null ? "" : a.getName()));
+	}
+
 	private void restoreConfValues(OWLOntology o) {
+		sortAgents(mainOntologyMetadata.getCreators());
+		sortAgents(mainOntologyMetadata.getContributors());
+		sortAgents(mainOntologyMetadata.getFunders());
 		if (isBlank(mainOntologyMetadata.getLatestVersion())) {
 			mainOntologyMetadata.setLatestVersion(conf(Constants.PF_LATEST_VERSION_URI, ""));
 		}
