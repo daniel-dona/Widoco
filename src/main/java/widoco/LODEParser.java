@@ -20,6 +20,10 @@ import java.io.IOException;
 import java.io.StringWriter;
 import java.net.URLDecoder;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.Properties;
 import java.util.Objects;
 import javax.xml.parsers.DocumentBuilder;
@@ -262,6 +266,8 @@ public class LODEParser {
 				}
 			}
 			// fix ids
+			// EDINT extension: a term declared both as a property and as an individual is
+			// documented twice with the same id; keep the first occurrence.
 			if (!"".equals(classList) && classList != null) {
 				classList = fixIds(classList);
 				classes = fixIds(classes);
@@ -293,6 +299,14 @@ public class LODEParser {
 				swrlruleslist = fixIds(swrlruleslist);
 				swrlrules = fixIds(swrlrules);
 			}
+			// EDINT extension: a term declared both as a property and as an individual is
+			// documented twice with the same id; keep the first occurrence. Runs after
+			// fixIds, because LODE uses a different internal id for the same term in
+			// each section until the ids are replaced by the IRIs.
+			namedIndividuals = dropDuplicatedEntities(namedIndividuals, classes, properties, dataProp,
+					annotationProp);
+			rules = dropDuplicatedEntities(rules, classes, properties, dataProp, annotationProp,
+					namedIndividuals);
 			logger.info("Parsing Complete!");
 		} catch (ParserConfigurationException | DOMException ex) {
 			logger.error("Exception interpreting the resource: " + ex.getMessage());
@@ -393,8 +407,45 @@ public class LODEParser {
 	 *            The input text with the links to be fixed
 	 * @return
 	 */
-	private String fixIds(String textToBeFixed) {
-		for (String keyToReplace : replacements.keySet()) {
+	/**
+	 * EDINT extension: LODE documents a term both as a property and as a named
+	 * individual when the ontology declares it as both (a qb:MeasureProperty that is
+	 * also a data property, for instance). That repeats the id in the same page and
+	 * makes the anchor ambiguous, so the later occurrences are dropped: the first one
+	 * is the informative one and the links keep working.
+	 */
+	private String dropDuplicatedEntities(String section, String... earlier) {
+		if (section == null || section.isEmpty()) {
+			return section;
+		}
+		Set<String> seen = new HashSet<>();
+		for (String other : earlier) {
+			if (other == null || other.isEmpty()) {
+				continue;
+			}
+			Matcher m = ENTITY_ID.matcher(other);
+			while (m.find()) {
+				seen.add(m.group(1));
+			}
+		}
+		String marker = "<div class=\"entity\" id=\"";
+		String[] chunks = section.split(Pattern.quote(marker), -1);
+		StringBuilder out = new StringBuilder(chunks[0]);
+		for (int i = 1; i < chunks.length; i++) {
+			int quote = chunks[i].indexOf('"');
+			String id = quote > 0 ? chunks[i].substring(0, quote) : "";
+			if (seen.add(id)) {
+				out.append(marker).append(chunks[i]);
+			} else {
+				logger.info("Skipping duplicated entity " + id);
+			}
+		}
+		return out.toString();
+	}
+
+	private static final Pattern ENTITY_ID = Pattern.compile("<div class=\"entity\" id=\"([^\"]+)\"");
+
+	private String fixIds(String textToBeFixed) {		for (String keyToReplace : replacements.keySet()) {
 			textToBeFixed = textToBeFixed.replace(keyToReplace, replacements.get(keyToReplace));
 			textToBeFixed = textToBeFixed.replace("<span>:", "<span>");
 		}
