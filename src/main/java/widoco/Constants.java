@@ -302,7 +302,35 @@ public class Constants {
 	public static final String PF_EXTRA_JS = "extraJS";
 	public static final String PF_EXTRA_RESOURCES = "extraResources";
 	public static final String PF_OMIT_README = "omitReadme";
+	/**
+	 * Short, readable name of a licence: a Creative Commons URL becomes
+	 * {@code CC BY-SA 4.0}, and anything else falls back to the declared name or the
+	 * URL itself. It is what the licence badge shows.
+	 */
+	public static String licenseLabel(String licenseURL, String declaredName) {
+		if (licenseURL != null) {
+			java.util.regex.Matcher m = java.util.regex.Pattern
+					.compile("^https?://creativecommons\\.org/(licenses|publicdomain)/([A-Za-z-]+)/([0-9.]+)")
+					.matcher(licenseURL);
+			if (m.find()) {
+				String prefix = "publicdomain".equals(m.group(1)) ? "CC0" : "CC";
+				return prefix + " " + m.group(2).toUpperCase() + " " + m.group(3);
+			}
+		}
+		if (declaredName != null && !declaredName.isEmpty()) {
+			return declaredName;
+		}
+		return licenseURL == null ? "" : licenseURL;
+	}
+
+	/** Escapes a label for a shields.io badge: {@code -} becomes {@code --}, space {@code _}. */
+	public static String shieldsEscape(String label) {
+		return label.replace("_", "__").replace("-", "--").replace(" ", "_");
+	}
+
 	public static final String PF_KOS_HTML = "kosHTML";
+	/** Label of the KOS thesaurus block in the metadata table. */
+	public static final String LANG_KOS_THESAURI = "kosThesauri";
 	public static final String PF_REUSED_VOCABULARY_NAMES = "reusedVocabularyNames";
 	public static final String PF_REUSED_VOCABULARY_URIS = "reusedVocabularyURIs";
 	public static final String PF_REFERENCES_CODE_REPO = "codeRepository";
@@ -1193,9 +1221,11 @@ public class Constants {
 				licenseURL = l.getProperty(LANG_LICENSE_URL_IF_NULL);
 			if (lname == null || "".equals(lname))
 				lname = l.getProperty(LANG_LICENSE_IF_NULL);
+			// the badge shows a short name (CC BY-SA 4.0), not the licence URL
 			head += "<dt>" + l.getProperty(LANG_LICENSE) + "</dt><dd>" + "<a href=\"" + licenseURL
 					+ "\" target=\"_blank\"><img src=\"https://img.shields.io/badge/License-"
-					+ lname.replace("-", "_").replace(" ", "%20") + "-blue.svg\" alt=\"" + licenseURL + "\" /></a>\n";
+					+ shieldsEscape(licenseLabel(licenseURL, lname)) + "-green.svg\" alt=\"" + licenseURL
+					+ "\" /></a>\n";
 			if (c.getMainOntology().getLicense().getIcon() != null
 					&& !"".equals(c.getMainOntology().getLicense().getIcon())) {
 				head += "<a href=\"" + licenseURL + "\" rel=\"license\" target=\"_blank\">\n" + "<img src=\""
@@ -1206,7 +1236,9 @@ public class Constants {
 		}
 		// EDINT extension: SKOS thesaurus links (conf key kosHTML, semicolon-separated)
 		if (!c.getKosHTML().isEmpty()) {
-			head += "<dt>Tesauros SKOS:</dt>\n<dd>";
+			// EDINT extension: the label comes from the language file, so the English
+			// page does not show a Spanish heading
+			head += "<dt>" + l.getProperty(LANG_KOS_THESAURI, "Tesauros SKOS") + ":</dt>\n<dd>";
 			for (String kos : c.getKosHTML()) {
 				String name = kos;
 				int slash = kos.lastIndexOf('/');

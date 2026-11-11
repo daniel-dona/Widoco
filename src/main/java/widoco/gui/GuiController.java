@@ -328,6 +328,9 @@ public final class GuiController {
 				// TO DO: improve this a little so language is passed on to load properties and generate doc.
 				for (String l : config.getLanguagesToGenerateDoc()) {
 					logger.info("Generating documentation for " + ontology + " in lang " + l);
+					// the conf is re-applied per language: its values may be tagged with a
+					// language (key@es or value@es) and the active one changes every pass
+					config.applyPropertyFile();
 					config.loadNamespaceDeclarations(config.getMainOntology().getOWLAPIModel());
 					if (getOntoMetadata) {
 						logger.info("Load properties from the ontology in lang " + l);

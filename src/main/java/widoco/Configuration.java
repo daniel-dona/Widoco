@@ -218,6 +218,83 @@ public class Configuration {
 		}
 	}
 
+	/** Separator that tags a conf value with a language: {@code value@es}. */
+	private static final String LANG_TAG = "@";
+
+	/** Suffix of a language tag ({@code es}, {@code en}, {@code pt-BR}); null otherwise. */
+	private static String languageTagOf(String value) {
+		int at = value.lastIndexOf(LANG_TAG);
+		if (at <= 0 || at >= value.length() - 1) {
+			return null;
+		}
+		String tag = value.substring(at + 1);
+		// only language-shaped tags, so an email or an @ in a path is not mistaken for one
+		return tag.matches("[A-Za-z]{2}(-[A-Za-z]{2,4})?") ? tag.toLowerCase() : null;
+	}
+
+	/**
+	 * Value of a configuration key for the active language.
+	 *
+	 * Resolution order (the most specific wins):
+	 * <ol>
+	 * <li>{@code key@lang=value} — the key itself is tagged (one value per language);</li>
+	 * <li>{@code key=value@lang} — the value is tagged, so it only applies to that language;</li>
+	 * <li>{@code key=value} — the general value, used when there is nothing specific.</li>
+	 * </ol>
+	 * A value tagged with another language is ignored (it does not fall back to the
+	 * general value unless the general one exists, which is the point of having both).
+	 */
+	public String conf(String key, String defaultValue) {
+		String lang = currentLanguage == null ? "" : currentLanguage.toLowerCase();
+		String specific = propertyFile.getProperty(key + LANG_TAG + lang);
+		if (specific != null) {
+			return specific;
+		}
+		String raw = propertyFile.getProperty(key);
+		if (raw == null) {
+			return defaultValue;
+		}
+		if (raw.indexOf(';') >= 0) {
+			// a list: each item carries its own tag, filtered by confList()
+			return raw;
+		}
+		String tag = languageTagOf(raw);
+		if (tag == null) {
+			return raw;
+		}
+		return tag.equals(lang) ? raw.substring(0, raw.lastIndexOf(LANG_TAG)) : defaultValue;
+	}
+
+	/**
+	 * A semicolon-separated conf key as a list for the active language.
+	 *
+	 * Each item may be tagged with its own language
+	 * ({@code kosHTML=kos/skos-es.html@es;kos/skos-en.html@en}), and the key may also
+	 * be tagged ({@code kosHTML@es=...}), which wins over the untagged key. Items
+	 * without a tag are always kept.
+	 */
+	public List<String> confList(String key) {
+		List<String> values = new ArrayList<>();
+		String raw = conf(key, "");
+		if (raw.isEmpty()) {
+			return values;
+		}
+		String lang = currentLanguage == null ? "" : currentLanguage.toLowerCase();
+		for (String item : raw.split(";")) {
+			String value = item.trim();
+			if (value.isEmpty()) {
+				continue;
+			}
+			String tag = languageTagOf(value);
+			if (tag == null) {
+				values.add(value);
+			} else if (tag.equals(lang)) {
+				values.add(value.substring(0, value.lastIndexOf(LANG_TAG)));
+			}
+		}
+		return values;
+	}
+
 	public File getTmpFile() {
 		return tmpFolder;
 	}
@@ -305,36 +382,66 @@ public class Configuration {
 			initializeOntology();
 			// this forces the property file to be in UTF 8 instead of the ISO
 			propertyFile.load(new InputStreamReader(new FileInputStream(path), "UTF-8"));
+		} catch (IOException ex) {
+			// Only a warning, as we can continue safely without a property file.
+			logger.warn("Error while reading configuration properties from [" + path + "]: " + ex.getMessage());
+			throw ex;
+		}
+		applyPropertyFile();
+	}
+
+	/**
+	 * Applies the configuration file to the model for the active language.
+	 *
+	 * Every value is read through {@link #conf(String, String)}, so a conf key may
+	 * carry a language: {@code kosHTML@es=kos/skos-es.html} or, for a single value,
+	 * {@code kosHTML=kos/skos-es.html@es}. A value tagged with another language is
+	 * ignored and the untagged one (if any) is used instead, so the general option
+	 * and the specific one can live together and the specific one wins.
+	 *
+	 * It is called once when the file is read and again for every language, which is
+	 * why the collections it fills are cleared first.
+	 */
+	public void applyPropertyFile() {
+		try {
+		// collections filled by this method: start from scratch so the configuration can
+		// be applied once per language without duplicating agents, imports or assets
+		mainOntologyMetadata.getCreators().clear();
+		mainOntologyMetadata.getContributors().clear();
+		mainOntologyMetadata.getImportedOntologies().clear();
+		mainOntologyMetadata.getExtendedOntologies().clear();
+		mainOntologyMetadata.getSerializations().clear();
+		extraResources.clear();
 			// We try to load from the configuration file. If it fails, then we should try
 			// to load from the ontology. Then, if it fails, we should ask the user.
-			abstractSection = propertyFile.getProperty(Constants.PF_ABSTRACT_SECTION_CONTENT);
-			contextURI = propertyFile.getProperty(Constants.PF_CONTEXT_URI, "");
-			mainOntologyMetadata.setTitle(propertyFile.getProperty(Constants.PF_ONT_TITLE, "Title goes here"));
-			mainOntologyMetadata.setCreationDate(propertyFile.getProperty(Constants.PF_DATE_CREATED, "Date created"));
-			mainOntologyMetadata.setModifiedDate(propertyFile.getProperty(Constants.PF_DATE_MODIFIED, "Date modified"));
-			mainOntologyMetadata.setIssuedDate(propertyFile.getProperty(Constants.PF_DATE_ISSUED, "Date issued"));
-			mainOntologyMetadata.setPreviousVersion(propertyFile.getProperty(Constants.PF_PREVIOUS_VERSION));
-			mainOntologyMetadata.setThisVersion(propertyFile.getProperty(Constants.PF_THIS_VERSION_URI));
-			mainOntologyMetadata.setLatestVersion(propertyFile.getProperty(Constants.PF_LATEST_VERSION_URI));
-			mainOntologyMetadata.setName(propertyFile.getProperty(Constants.PF_ONT_NAME));
-			mainOntologyMetadata.setNamespacePrefix(propertyFile.getProperty(Constants.PF_ONT_PREFIX));
-			mainOntologyMetadata.setNamespaceURI(propertyFile.getProperty(Constants.PF_ONT_NAMESPACE_URI));
-			mainOntologyMetadata.setRevision(propertyFile.getProperty(Constants.PF_ONT_REVISION_NUMBER));
+			abstractSection = conf(Constants.PF_ABSTRACT_SECTION_CONTENT, null);
+			contextURI = conf(Constants.PF_CONTEXT_URI, "");
+			mainOntologyMetadata.setTitle(conf(Constants.PF_ONT_TITLE, "Title goes here"));
+			mainOntologyMetadata.setCreationDate(conf(Constants.PF_DATE_CREATED, "Date created"));
+			mainOntologyMetadata.setModifiedDate(conf(Constants.PF_DATE_MODIFIED, "Date modified"));
+			mainOntologyMetadata.setIssuedDate(conf(Constants.PF_DATE_ISSUED, "Date issued"));
+			mainOntologyMetadata.setPreviousVersion(conf(Constants.PF_PREVIOUS_VERSION, null));
+			mainOntologyMetadata.setThisVersion(conf(Constants.PF_THIS_VERSION_URI, null));
+			mainOntologyMetadata.setLatestVersion(conf(Constants.PF_LATEST_VERSION_URI, null));
+			mainOntologyMetadata.setName(conf(Constants.PF_ONT_NAME, null));
+			mainOntologyMetadata.setNamespacePrefix(conf(Constants.PF_ONT_PREFIX, null));
+			mainOntologyMetadata.setNamespaceURI(conf(Constants.PF_ONT_NAMESPACE_URI, null));
+			mainOntologyMetadata.setRevision(conf(Constants.PF_ONT_REVISION_NUMBER, null));
 			Agent publisher = new Agent();
-			publisher.setName(propertyFile.getProperty(Constants.PF_PUBLISHER, ""));
-			publisher.setURL(propertyFile.getProperty(Constants.PF_PUBLISHER_URI, ""));
-			publisher.setInstitutionName(propertyFile.getProperty(Constants.PF_PUBLISHER_INSTITUTION, ""));
-			publisher.setInstitutionURL(propertyFile.getProperty(Constants.PF_PUBLISHER_INSTITUTION_URI, ""));
+			publisher.setName(conf(Constants.PF_PUBLISHER, ""));
+			publisher.setURL(conf(Constants.PF_PUBLISHER_URI, ""));
+			publisher.setInstitutionName(conf(Constants.PF_PUBLISHER_INSTITUTION, ""));
+			publisher.setInstitutionURL(conf(Constants.PF_PUBLISHER_INSTITUTION_URI, ""));
 			mainOntologyMetadata.setPublisher(publisher);
-			String aux = propertyFile.getProperty(Constants.PF_AUTHORS, "");
+			String aux = conf(Constants.PF_AUTHORS, "");
 			String[] names, urls, authorInst, authorInstURI;
 			if (!aux.isEmpty()) {
 				names = aux.split(";");
-				aux = propertyFile.getProperty(Constants.PF_AUTHORS_URI, "");
+				aux = conf(Constants.PF_AUTHORS_URI, "");
 				urls = aux.split(";");
-				aux = propertyFile.getProperty(Constants.PF_AUTHORS_INSTITUTION, "");
+				aux = conf(Constants.PF_AUTHORS_INSTITUTION, "");
 				authorInst = aux.split(";");
-				aux = propertyFile.getProperty(Constants.PF_AUTHORS_INSTITUTION_URI, "");
+				aux = conf(Constants.PF_AUTHORS_INSTITUTION_URI, "");
 				authorInstURI = aux.split(";");
 				for (int i = 0; i < names.length; i++) {
 					Agent a = new Agent();
@@ -357,14 +464,14 @@ public class Configuration {
 					mainOntologyMetadata.getCreators().add(a);
 				}
 			}
-			aux = propertyFile.getProperty(Constants.PF_CONTRIBUTORS, "");
+			aux = conf(Constants.PF_CONTRIBUTORS, "");
 			if (!aux.isEmpty()) {
 				names = aux.split(";");
-				aux = propertyFile.getProperty(Constants.PF_CONTRIBUTORS_URI, "");
+				aux = conf(Constants.PF_CONTRIBUTORS_URI, "");
 				urls = aux.split(";");
-				aux = propertyFile.getProperty(Constants.PF_CONTRIBUTORS_INSTITUTION, "");
+				aux = conf(Constants.PF_CONTRIBUTORS_INSTITUTION, "");
 				authorInst = aux.split(";");
-				aux = propertyFile.getProperty(Constants.PF_CONTRIBUTORS_INSTITUTION_URI, "");
+				aux = conf(Constants.PF_CONTRIBUTORS_INSTITUTION_URI, "");
 				authorInstURI = aux.split(";");
 				for (int i = 0; i < names.length; i++) {
 					Agent a = new Agent();
@@ -387,9 +494,9 @@ public class Configuration {
 					mainOntologyMetadata.getContributors().add(a);
 				}
 			}
-			aux = propertyFile.getProperty(Constants.PF_IMPORTED_ONTOLOGY_NAMES, "");
+			aux = conf(Constants.PF_IMPORTED_ONTOLOGY_NAMES, "");
 			names = aux.split(";");
-			aux = propertyFile.getProperty(Constants.PF_IMPORTED_ONTOLOGY_URIS, "");
+			aux = conf(Constants.PF_IMPORTED_ONTOLOGY_URIS, "");
 			urls = aux.split(";");
 			for (int i = 0; i < names.length; i++) {
 				if (!"".equals(names[i])) {
@@ -403,9 +510,9 @@ public class Configuration {
 					mainOntologyMetadata.getImportedOntologies().add(o);
 				}
 			}
-			aux = propertyFile.getProperty(Constants.PF_EXTENDED_ONTOLOGY_NAMES, "");
+			aux = conf(Constants.PF_EXTENDED_ONTOLOGY_NAMES, "");
 			names = aux.split(";");
-			aux = propertyFile.getProperty(Constants.PF_EXTENDED_ONTOLOGY_URIS, "");
+			aux = conf(Constants.PF_EXTENDED_ONTOLOGY_URIS, "");
 			urls = aux.split(";");
 			for (int i = 0; i < names.length; i++) {
 				if (!"".equals(names[i])) {
@@ -419,51 +526,51 @@ public class Configuration {
 					mainOntologyMetadata.getExtendedOntologies().add(o);
 				}
 			}
-			mainOntologyMetadata.getLicense().setName(propertyFile.getProperty(Constants.PF_LICENSE_NAME, ""));
-			mainOntologyMetadata.getLicense().setUrl(propertyFile.getProperty(Constants.PF_LICENSE_URI, ""));
-			mainOntologyMetadata.getLicense().setIcon(propertyFile.getProperty(Constants.PF_LICENSE_ICON_URL, ""));
-			mainOntologyMetadata.setStatus(propertyFile.getProperty(Constants.STATUS, "Specification Draft"));
+			mainOntologyMetadata.getLicense().setName(conf(Constants.PF_LICENSE_NAME, ""));
+			mainOntologyMetadata.getLicense().setUrl(conf(Constants.PF_LICENSE_URI, ""));
+			mainOntologyMetadata.getLicense().setIcon(conf(Constants.PF_LICENSE_ICON_URL, ""));
+			mainOntologyMetadata.setStatus(conf(Constants.STATUS, "Specification Draft"));
 			mainOntologyMetadata.setCiteAs(Ontology.CITE_AS_FROM_CONF,
-					propertyFile.getProperty(Constants.PF_CITE_AS, ""));
-			mainOntologyMetadata.setDoi(propertyFile.getProperty(Constants.PF_DOI, ""));
-			mainOntologyMetadata.setDescription(propertyFile.getProperty(Constants.PF_DESCRIPTION, ""));
-			mainOntologyMetadata.setLogo(propertyFile.getProperty(Constants.PF_LOGO, ""));
-			mainOntologyMetadata.setBackwardsCompatibleWith(propertyFile.getProperty(Constants.COMPATIBLE, ""));
-			mainOntologyMetadata.setIncompatibleWith(propertyFile.getProperty(Constants.PF_INCOMPATIBLE_WITH,""));
-			this.setIntroText(propertyFile.getProperty(Constants.PF_INTRODUCTION, ""));
+					conf(Constants.PF_CITE_AS, ""));
+			mainOntologyMetadata.setDoi(conf(Constants.PF_DOI, ""));
+			mainOntologyMetadata.setDescription(conf(Constants.PF_DESCRIPTION, ""));
+			mainOntologyMetadata.setLogo(conf(Constants.PF_LOGO, ""));
+			mainOntologyMetadata.setBackwardsCompatibleWith(conf(Constants.COMPATIBLE, ""));
+			mainOntologyMetadata.setIncompatibleWith(conf(Constants.PF_INCOMPATIBLE_WITH,""));
+			this.setIntroText(conf(Constants.PF_INTRODUCTION, ""));
 			// vocabLoadedSerialization =
-			// propertyFile.getProperty(TextConstants.deafultSerialization, "RDF/XML");
-			String serializationRDFXML = propertyFile.getProperty(Constants.PF_SERIALIZATION_RDF, "");
+			// conf(TextConstants.deafultSerialization, "RDF/XML");
+			String serializationRDFXML = conf(Constants.PF_SERIALIZATION_RDF, "");
 			if (!"".equals(serializationRDFXML)) {
 				mainOntologyMetadata.addSerialization(Constants.RDF_XML, serializationRDFXML);
 			}
-			String serializationTTL = propertyFile.getProperty(Constants.PF_SERIALIZATION_TTL, "");
+			String serializationTTL = conf(Constants.PF_SERIALIZATION_TTL, "");
 			if (!"".equals(serializationTTL)) {
 				mainOntologyMetadata.addSerialization(Constants.TTL, serializationTTL);
 			}
-			String serializationNT = propertyFile.getProperty(Constants.PF_SERIALIZATION_NT,
-					propertyFile.getProperty(Constants.PF_SERIALIZATION_N3, ""));
+			String serializationNT = conf(Constants.PF_SERIALIZATION_NT,
+					conf(Constants.PF_SERIALIZATION_N3, ""));
 			if (!"".equals(serializationNT)) {
 				mainOntologyMetadata.addSerialization(Constants.NT, serializationNT);
 			}
-			String serializationJSONLD = propertyFile.getProperty(Constants.PF_SERIALIZATION_JSON, "");
+			String serializationJSONLD = conf(Constants.PF_SERIALIZATION_JSON, "");
 			if (!"".equals(serializationJSONLD)) {
 				mainOntologyMetadata.addSerialization(Constants.JSON_LD, serializationJSONLD);
 			}
-			this.googleAnalyticsCode = propertyFile.getProperty("GoogleAnalyticsCode");
-			String images = propertyFile.getProperty(Constants.PF_IMAGES, "");
+			this.googleAnalyticsCode = conf("GoogleAnalyticsCode", null);
+			String images = conf(Constants.PF_IMAGES, "");
 			if (!"".equals(images)){
 				mainOntologyMetadata.setImages(new ArrayList<>(Arrays.asList(images.split(";"))));
 			}
-			String source = propertyFile.getProperty(Constants.PF_SOURCE, "");
+			String source = conf(Constants.PF_SOURCE, "");
 			if (!"".equals(source)){
 				mainOntologyMetadata.setSources(new ArrayList<>(Arrays.asList(source.split(";"))));
 			}
-			String seeAlso = propertyFile.getProperty(Constants.PF_SEE_ALSO, "");
+			String seeAlso = conf(Constants.PF_SEE_ALSO, "");
 			if (!"".equals(seeAlso)){
 				mainOntologyMetadata.setSeeAlso(new ArrayList<>(Arrays.asList(seeAlso.split(";"))));
 			}
-			String funders = propertyFile.getProperty(Constants.PF_FUNDERS, "");
+			String funders = conf(Constants.PF_FUNDERS, "");
 			if (!"".equals(funders)){
 				String [] fundersURI = funders.split(";");
 				for (String s : fundersURI) {
@@ -473,37 +580,33 @@ public class Configuration {
 					mainOntologyMetadata.getFunders().add(a);
 				}
 			}
-			String funding = propertyFile.getProperty(Constants.PF_FUNDING, "");
+			String funding = conf(Constants.PF_FUNDING, "");
 			if (!"".equals(funding)){
 				mainOntologyMetadata.setFundingGrants(new ArrayList<String>(Arrays.asList(funding.split(";"))));
 			}
-			this.setAbstractPath(propertyFile.getProperty(Constants.PF_ABSTRACT_PATH, null));
-			this.setDescriptionPath(propertyFile.getProperty(Constants.PF_DESCRIPTION_PATH, null));
-			this.setIntroductionPath(propertyFile.getProperty(Constants.PF_INTRO_PATH, null));
-			this.setOverviewPath(propertyFile.getProperty(Constants.PF_OVERVIEW_PATH, null));
-			this.setReferencesPath(propertyFile.getProperty(Constants.PF_REFERENCES_PATH, null));
+			this.setAbstractPath(conf(Constants.PF_ABSTRACT_PATH, null));
+			this.setDescriptionPath(conf(Constants.PF_DESCRIPTION_PATH, null));
+			this.setIntroductionPath(conf(Constants.PF_INTRO_PATH, null));
+			this.setOverviewPath(conf(Constants.PF_OVERVIEW_PATH, null));
+			this.setReferencesPath(conf(Constants.PF_REFERENCES_PATH, null));
 			loadPerLanguageSectionProperties();
 			loadExtraResources();
 			loadDiagramProperties();
-			this.omitReadme = Boolean.parseBoolean(propertyFile.getProperty(Constants.PF_OMIT_README, "false"));
+			this.omitReadme = Boolean.parseBoolean(conf(Constants.PF_OMIT_README, "false"));
 			this.resolveVocabularyTitles = Boolean.parseBoolean(
-					propertyFile.getProperty(Constants.PF_RESOLVE_VOCAB_TITLES, "true"));
+					conf(Constants.PF_RESOLVE_VOCAB_TITLES, "true"));
 			this.kosHTML.clear();
-			String kos = propertyFile.getProperty(Constants.PF_KOS_HTML, "");
-			if (!kos.isEmpty()) {
-				kosHTML.addAll(Arrays.asList(kos.split(";")));
-			}
-		String er = propertyFile.getProperty(Constants.PF_EXTRA_RESOURCES, "");
+			kosHTML.addAll(confList(Constants.PF_KOS_HTML));
+		String er = conf(Constants.PF_EXTRA_RESOURCES, "");
 		if (!er.isEmpty()) {
 			extraResources.addAll(Arrays.asList(er.split(";")));
 		}
-			mainOntologyMetadata.setCodeRepository(propertyFile.getProperty(Constants.PF_REFERENCES_CODE_REPO, ""));
-		} catch (IOException ex) {
-			// Only a warning, as we can continue safely without a property file.
-			logger.warn("Error while reading configuration properties from [" + path + "]: " + ex.getMessage());
-			throw ex;
+			mainOntologyMetadata.setCodeRepository(conf(Constants.PF_REFERENCES_CODE_REPO, ""));
+		} catch (Exception ex) {
+			logger.warn("Error while applying the configuration properties: " + ex.getMessage());
 		}
 	}
+
 
 	/**
 	 * Method that given an ontology retrieves the main metadata properties into the
@@ -524,9 +627,9 @@ public class Configuration {
 				{ Constants.TTL, Constants.PF_SERIALIZATION_TTL },
 				{ Constants.NT, Constants.PF_SERIALIZATION_NT },
 				{ Constants.JSON_LD, Constants.PF_SERIALIZATION_JSON } }) {
-			String v = propertyFile.getProperty(pair[1], "");
+			String v = conf(pair[1], "");
 			if (isBlank(v) && Constants.NT.equals(pair[0])) {
-				v = propertyFile.getProperty(Constants.PF_SERIALIZATION_N3, "");
+				v = conf(Constants.PF_SERIALIZATION_N3, "");
 			}
 			if (!isBlank(v)) {
 				confSerializations.put(pair[0], v);
@@ -887,8 +990,8 @@ public class Configuration {
 		}
 		// labels from conf (reusedVocabularyNames/URIs)
 		Map<String, String> confLabels = new HashMap<>();
-		String[] names = propertyFile.getProperty(Constants.PF_REUSED_VOCABULARY_NAMES, "").split(";");
-		String[] uris = propertyFile.getProperty(Constants.PF_REUSED_VOCABULARY_URIS, "").split(";");
+		String[] names = conf(Constants.PF_REUSED_VOCABULARY_NAMES, "").split(";");
+		String[] uris = conf(Constants.PF_REUSED_VOCABULARY_URIS, "").split(";");
 		for (int i = 0; i < names.length && i < uris.length; i++) {
 			if (!isBlank(names[i])) {
 				confLabels.put(normalizeNs(uris[i]), names[i]);
@@ -928,42 +1031,42 @@ public class Configuration {
 
 	private void restoreConfValues(OWLOntology o) {
 		if (isBlank(mainOntologyMetadata.getLatestVersion())) {
-			mainOntologyMetadata.setLatestVersion(propertyFile.getProperty(Constants.PF_LATEST_VERSION_URI, ""));
+			mainOntologyMetadata.setLatestVersion(conf(Constants.PF_LATEST_VERSION_URI, ""));
 		}
 		if (isBlank(mainOntologyMetadata.getPreviousVersion())) {
-			mainOntologyMetadata.setPreviousVersion(propertyFile.getProperty(Constants.PF_PREVIOUS_VERSION, ""));
+			mainOntologyMetadata.setPreviousVersion(conf(Constants.PF_PREVIOUS_VERSION, ""));
 		}
 		if (isBlank(mainOntologyMetadata.getCiteAs())) {
 			mainOntologyMetadata.setCiteAs(Ontology.CITE_AS_FROM_CONF,
-					propertyFile.getProperty(Constants.PF_CITE_AS, ""));
+					conf(Constants.PF_CITE_AS, ""));
 		}
 		if (isBlank(mainOntologyMetadata.getStatus())) {
-			mainOntologyMetadata.setStatus(propertyFile.getProperty(Constants.STATUS, ""));
+			mainOntologyMetadata.setStatus(conf(Constants.STATUS, ""));
 		}
 		if (isBlank(mainOntologyMetadata.getCreationDate())) {
-			mainOntologyMetadata.setCreationDate(propertyFile.getProperty(Constants.PF_DATE_CREATED, ""));
+			mainOntologyMetadata.setCreationDate(conf(Constants.PF_DATE_CREATED, ""));
 		}
 		if (isBlank(mainOntologyMetadata.getIssuedDate())) {
-			mainOntologyMetadata.setIssuedDate(propertyFile.getProperty(Constants.PF_DATE_ISSUED, ""));
+			mainOntologyMetadata.setIssuedDate(conf(Constants.PF_DATE_ISSUED, ""));
 		}
 		if (isBlank(mainOntologyMetadata.getModifiedDate())) {
-			mainOntologyMetadata.setModifiedDate(propertyFile.getProperty(Constants.PF_DATE_MODIFIED, ""));
+			mainOntologyMetadata.setModifiedDate(conf(Constants.PF_DATE_MODIFIED, ""));
 		}
 		if (isBlank(mainOntologyMetadata.getTitle())) {
-			mainOntologyMetadata.setTitle(propertyFile.getProperty(Constants.PF_ONT_TITLE, ""));
+			mainOntologyMetadata.setTitle(conf(Constants.PF_ONT_TITLE, ""));
 		}
 		// publisher agent from conf (name, URL, institution)
 		if (mainOntologyMetadata.getPublisher() == null || isBlank(mainOntologyMetadata.getPublisher().getName())) {
 			Agent ag = new Agent();
-			ag.setName(propertyFile.getProperty(Constants.PF_PUBLISHER, ""));
-			ag.setURL(propertyFile.getProperty(Constants.PF_PUBLISHER_URI, ""));
-			ag.setInstitutionName(propertyFile.getProperty(Constants.PF_PUBLISHER_INSTITUTION, ""));
-			ag.setInstitutionURL(propertyFile.getProperty(Constants.PF_PUBLISHER_INSTITUTION_URI, ""));
+			ag.setName(conf(Constants.PF_PUBLISHER, ""));
+			ag.setURL(conf(Constants.PF_PUBLISHER_URI, ""));
+			ag.setInstitutionName(conf(Constants.PF_PUBLISHER_INSTITUTION, ""));
+			ag.setInstitutionURL(conf(Constants.PF_PUBLISHER_INSTITUTION_URI, ""));
 			mainOntologyMetadata.setPublisher(ag);
 		}
 		// creators from conf authors list if the ontology declares none
-		if (mainOntologyMetadata.getCreators().isEmpty() && !isBlank(propertyFile.getProperty(Constants.PF_AUTHORS, ""))) {
-			for (String a : propertyFile.getProperty(Constants.PF_AUTHORS, "").split(";")) {
+		if (mainOntologyMetadata.getCreators().isEmpty() && !isBlank(conf(Constants.PF_AUTHORS, ""))) {
+			for (String a : conf(Constants.PF_AUTHORS, "").split(";")) {
 				if (!a.trim().isEmpty()) {
 					Agent ag = new Agent();
 					ag.setName(a.trim());
@@ -1662,7 +1765,7 @@ public class Configuration {
 			if (!m.matches()) {
 				continue;
 			}
-			String value = propertyFile.getProperty(key, "");
+			String value = conf(key, "");
 			String lang = m.group(2);
 			switch (m.group(1)) {
 				case "abstract":
@@ -1698,13 +1801,13 @@ public class Configuration {
 	 * "diagramCaption-<lang>", e.g. diagramCaption-es / diagramCaption-en).
 	 */
 	private void loadDiagramProperties() {
-		String d = propertyFile.getProperty("diagram", "");
+		String d = conf("diagram", "");
 		ontologyDiagram = d.trim().isEmpty() ? null : d.trim();
 		diagramCaptionsByLang.clear();
 		for (String key : propertyFile.stringPropertyNames()) {
 			if (key.equals("diagramCaption") || key.startsWith("diagramCaption-")) {
 				String lang = key.equals("diagramCaption") ? "" : key.substring("diagramCaption-".length());
-				String value = propertyFile.getProperty(key, "").trim();
+				String value = conf(key, "").trim();
 				if (!value.isEmpty()) {
 					diagramCaptionsByLang.put(lang, value);
 				}
@@ -1743,11 +1846,11 @@ public class Configuration {
 	private void loadExtraResources() {
 		extraCSS.clear();
 		extraJS.clear();
-		String css = propertyFile.getProperty(Constants.PF_EXTRA_CSS, "");
+		String css = conf(Constants.PF_EXTRA_CSS, "");
 		if (!css.isEmpty()) {
 			extraCSS.addAll(Arrays.asList(css.split(";")));
 		}
-		String js = propertyFile.getProperty(Constants.PF_EXTRA_JS, "");
+		String js = conf(Constants.PF_EXTRA_JS, "");
 		if (!js.isEmpty()) {
 			extraJS.addAll(Arrays.asList(js.split(";")));
 		}
