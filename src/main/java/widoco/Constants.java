@@ -1293,8 +1293,11 @@ public class Constants {
 		head += "</dl>\n\n";
 
 		if (c.isPublishProvenance()) {
-			head += "<a href=\"provenance/provenance-" + c.getCurrentLanguage() + ".html\" target=\"_blank\">"
-					+ l.getProperty(LANG_PROV_HEAD) + "</a>";
+			// its own block: after the definition list it looked like part of the
+			// last metadata row
+			head += "<p class=\"provenance\"><a href=\"provenance/provenance-"
+					+ c.getCurrentLanguage() + ".html\" target=\"_blank\">"
+					+ l.getProperty(LANG_PROV_HEAD) + "</a></p>\n";
 		}
 		head += "<hr/>\n" + "</div>\n";
 		return head;
@@ -1352,17 +1355,44 @@ public class Constants {
 				+ lang.getProperty(LANG_CROSS_REF_PLACEHOLDER) +" "+ c.getMainOntology().getName() + ".\n";
 	}
 
+	/**
+	 * IRI of the documented page, used as the subject of the provenance statements.
+	 *
+	 * It is the version IRI when the ontology declares one, then the ontology IRI;
+	 * never the output folder, which used to end up here as a relative path (or as a
+	 * Windows path in the Turtle) and made the provenance page claim that
+	 * "documentation" was a specialisation of the vocabulary.
+	 */
+	public static String provenanceURI(Configuration c) {
+		String uri = c.getMainOntology().getThisVersion();
+		if (uri == null || uri.isEmpty()) {
+			uri = c.getMainOntology().getLatestVersion();
+		}
+		if (uri == null || uri.isEmpty()) {
+			uri = c.getMainOntology().getNamespaceURI();
+		}
+		if (uri == null) {
+			return "";
+		}
+		while (uri.endsWith("#") || uri.endsWith("/")) {
+			uri = uri.substring(0, uri.length() - 1);
+		}
+		return uri;
+	}
+
 	public static String getProvenanceHtml(Configuration c, Properties lang) {
 		String provhtml = "<!DOCTYPE html>\n" + "<html>\n" + "<head>\n"
 				+ "<meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\" />\n" + " \n" + "  </head> \n"
 				+ "\n" + "<body>\n" + "<div class=\"head\">\n";
-		String provURI = c.getMainOntology().getThisVersion();
-		if (provURI == null || provURI.equals("")) {
-			provURI = c.getDocumentationURI();
-		}
+		String provURI = provenanceURI(c);
 		if (c.getMainOntology().getTitle() != null && !"".equals(c.getMainOntology().getTitle())) {
-			provhtml += "<h1>" + lang.getProperty(LANG_PROV1) + " " + c.getMainOntology().getTitle() + " "
-					+ lang.getProperty(LANG_PROV2) + " (" + provURI + ")</h1>\n";
+			// "Provenance for <title>. (iri)" in English, "Provenance para la
+			// documentación de <title>. (iri)" in Spanish: the separator before the
+			// second part is only needed when it is a word, not punctuation
+			String prov2 = lang.getProperty(LANG_PROV2, "");
+			String separator = prov2.startsWith(".") || prov2.startsWith(",") ? "" : " ";
+			provhtml += "<h1>" + lang.getProperty(LANG_PROV1) + " " + c.getMainOntology().getTitle().trim()
+					+ separator + prov2 + " (" + provURI + ")</h1>\n";
 		}
 		provhtml += "<ul>\n";
 		if (!c.getMainOntology().getCreators().isEmpty()) {
@@ -1378,7 +1408,10 @@ public class Constants {
 
 			provhtml += "</li>\n";
 		}
-		if (c.getMainOntology().getLatestVersion() != null && !"".equals(c.getMainOntology().getLatestVersion())) {
+		if (c.getMainOntology().getLatestVersion() != null && !"".equals(c.getMainOntology().getLatestVersion())
+				&& !c.getMainOntology().getLatestVersion().equals(provURI)) {
+			// only when the page is not already the latest version, otherwise the
+			// sentence reads "X is a specialisation of X"
 			provhtml += "<li>" + provURI + " " + lang.getProperty(LANG_SPEC) + " "
 					+ c.getMainOntology().getLatestVersion() + "</li>\n";
 		}
@@ -1390,7 +1423,7 @@ public class Constants {
 		if (c.getMainOntology().getCreationDate() != null && !"".equals(c.getMainOntology().getCreationDate())) {
 			provhtml += "<li>" + lang.getProperty(LANG_GENERATED) + " " + c.getMainOntology().getCreationDate();
 		}
-		provhtml += "</ul>\n" + "</div>\n<p>" + lang.getProperty(LANG_BACK) + " <a href=\"..\\index-"
+		provhtml += "</ul>\n" + "</div>\n<p>" + lang.getProperty(LANG_BACK) + " <a href=\"../index-"
 				+ c.getCurrentLanguage() + ".html\">" + lang.getProperty(LANG_BACK1) + "</a>. <a href=\"provenance-"
 				+ c.getCurrentLanguage() + ".ttl\">" + lang.getProperty(LANG_BACK2) + "</a></p>" + "</div>\n</body> \n"
 				+ "</html>";
@@ -1413,10 +1446,7 @@ public class Constants {
 	}
 
 	public static String getProvenanceRDF(Configuration c) {
-		String provURI = c.getMainOntology().getThisVersion();
-		if (provURI == null || provURI.equals("")) {
-			provURI = "..\\index-" + c.getCurrentLanguage() + ".html";
-		}
+		String provURI = provenanceURI(c);
 		String provrdf = "@prefix prov: <http://www.w3.org/ns/prov#> .\n"
 				+ "@prefix dc: <http://purl.org/dc/terms/> .\n"
                                 + "@prefix foaf: <http://xmlns.com/foaf/0.1/> .\n"
